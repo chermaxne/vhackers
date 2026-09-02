@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/*
+  Lattice theme — periwinkle/indigo primary, pale lavender background,
+  pastel green/amber/coral as semantic accents, bold rounded display type.
+  Reference: team Canva mockup ("Lattice" app).
+*/
+:root {
+  --background: #f5f8ff;
+  --surface: #ffffff;
+
+  --primary: #7684c0;
+  --primary-dark: #5b6fc6;
+  --primary-light: #adb9ed;
+  --primary-pale: #e4e6f2;
+
+  --accent-green: #76c07b;
+  --accent-green-pale: #e4f2e5;
+  --accent-amber: #ffc660;
+  --accent-amber-pale: #fff4df;
+  --accent-coral: #c07676;
+  --accent-coral-pale: #f2e4e4;
+
+  --ink: #3d4372;
+  --ink-muted: #8790c0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+
+  --color-primary: var(--primary);
+  --color-primary-dark: var(--primary-dark);
+  --color-primary-light: var(--primary-light);
+  --color-primary-pale: var(--primary-pale);
+
+  --color-accent-green: var(--accent-green);
+  --color-accent-green-pale: var(--accent-green-pale);
+  --color-accent-amber: var(--accent-amber);
+  --color-accent-amber-pale: var(--accent-amber-pale);
+  --color-accent-coral: var(--accent-coral);
+  --color-accent-coral-pale: var(--accent-coral-pale);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+}
+
+body {
+  background: var(--background);
+  color: var(--ink);
+}
+
+/* Repeated-word watermark texture, e.g. behind the resume-upload CTA. */
+.watermark-bg {
+  position: relative;
+  overflow: hidden;
+}
+.watermark-bg::before {
+  content: attr(data-watermark) " " attr(data-watermark) " " attr(data-watermark) " "
+    attr(data-watermark) " " attr(data-watermark) " " attr(data-watermark) " "
+    attr(data-watermark) " " attr(data-watermark) " " attr(data-watermark) " "
+    attr(data-watermark) " " attr(data-watermark) " " attr(data-watermark) " ";
+  position: absolute;
+  inset: -10%;
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.75rem;
+  line-height: 1.6;
+  color: var(--primary);
+  opacity: 0.08;
+  word-spacing: 0.5rem;
+  transform: rotate(-4deg);
+  pointer-events: none;
+}
