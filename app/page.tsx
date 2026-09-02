@@ -9,8 +9,11 @@ import AiSummary from "@/components/screens/AiSummary";
 import SkillGapScreen from "@/components/screens/SkillGapScreen";
 import WhatThisUnlocks from "@/components/screens/WhatThisUnlocks";
 import RoadmapUnlocked from "@/components/screens/RoadmapUnlocked";
+import ResumeTailoring from "@/components/screens/ResumeTailoring";
 import type { JobCard } from "@/lib/jobs";
 import { buildRoadmapForRole, buildRoadmapFromLikedJobs, type Roadmap } from "@/lib/roadmap";
+import type { ResumeFields } from "@/lib/llm/extractResume";
+import type { Constraints } from "@/lib/constraints";
 
 type Screen =
   | "profile"
@@ -20,7 +23,8 @@ type Screen =
   | "summary"
   | "skill-gap"
   | "unlocks"
-  | "roadmap";
+  | "roadmap"
+  | "resume-tailoring";
 
 const STEP_ORDER: Screen[] = [
   "profile",
@@ -34,6 +38,9 @@ const STEP_ORDER: Screen[] = [
 
 interface FlowState {
   resumeFileName: string | null;
+  resumeFields: ResumeFields | null;
+  resumeText: string | null;
+  constraints: Constraints | null;
   cameFromDirectEntry: boolean;
   likedJobs: JobCard[];
   roadmap: Roadmap | null;
@@ -41,6 +48,9 @@ interface FlowState {
 
 const INITIAL_STATE: FlowState = {
   resumeFileName: null,
+  resumeFields: null,
+  resumeText: null,
+  constraints: null,
   cameFromDirectEntry: false,
   likedJobs: [],
   roadmap: null,
@@ -91,8 +101,8 @@ export default function Home() {
 
       {screen === "profile" && (
         <ProfileCreation
-          onDone={({ resumeFileName, knowsTargetRole }) => {
-            setFlow((prev) => ({ ...prev, resumeFileName }));
+          onDone={({ resumeFileName, resumeFields, resumeText, knowsTargetRole }) => {
+            setFlow((prev) => ({ ...prev, resumeFileName, resumeFields, resumeText }));
             navigate(knowsTargetRole ? "direct-role" : "guided-discovery");
           }}
         />
@@ -100,8 +110,9 @@ export default function Home() {
 
       {screen === "direct-role" && (
         <DirectRoleEntry
-          onSubmit={(role) => {
-            setFlow((prev) => ({ ...prev, cameFromDirectEntry: true, roadmap: buildRoadmapForRole(role) }));
+          onSubmit={async (role) => {
+            const roadmap = await buildRoadmapForRole(role);
+            setFlow((prev) => ({ ...prev, cameFromDirectEntry: true, roadmap }));
             navigate("roadmap");
           }}
           onBack={onBack}
@@ -110,11 +121,11 @@ export default function Home() {
 
       {screen === "guided-discovery" && (
         <GuidedDiscoveryIntro
-          onSubmit={() => {
-            // Remote-work preference isn't wired into filtering yet — the
-            // deck is small sample data, so there's nothing to filter
-            // against. Captured here so the state shape is ready when a
-            // real dataset lands.
+          onSubmit={(constraints) => {
+            // Constraints aren't wired into deck filtering yet — the
+            // sample deck is too small to filter meaningfully — but they
+            // do drive the pacing/budget annotations on the final roadmap.
+            setFlow((prev) => ({ ...prev, constraints }));
             navigate("swipe");
           }}
           onBack={onBack}
@@ -157,8 +168,20 @@ export default function Home() {
       {screen === "roadmap" && flow.roadmap && (
         <RoadmapUnlocked
           roadmap={flow.roadmap}
+          constraints={flow.constraints}
+          resumeText={flow.resumeText}
           onExploreOtherRoles={flow.cameFromDirectEntry ? () => navigate("swipe") : undefined}
+          onTailorResume={flow.resumeText ? () => navigate("resume-tailoring") : undefined}
           onRestart={restart}
+          onBack={onBack}
+        />
+      )}
+
+      {screen === "resume-tailoring" && flow.resumeText && flow.roadmap && (
+        <ResumeTailoring
+          resumeText={flow.resumeText}
+          targetRole={flow.roadmap.targetLabel}
+          emphasizeSkills={flow.roadmap.skillGaps.slice(0, 5).map((g) => g.skill)}
           onBack={onBack}
         />
       )}
