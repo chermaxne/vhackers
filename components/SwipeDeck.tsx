@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SAMPLE_JOBS, type JobCard as JobCardData } from "@/lib/jobs";
 import JobCard from "./JobCard";
 import { IconBackArrow } from "./icons/LatticeIcons";
@@ -19,17 +19,66 @@ const cards: JobCardData[] = SAMPLE_JOBS;
 export default function SwipeDeck({
   onComplete,
   onBack,
+  userSkills,
 }: {
   onComplete: (liked: JobCardData[]) => void;
   onBack?: () => void;
+  userSkills?: string[];
 }) {
   const [index, setIndex] = useState(0);
   const [liked, setLiked] = useState<JobCardData[]>([]);
+  const [matchedSkills, setMatchedSkills] = useState<
+    Record<
+      string,
+      {
+        matchedTransferableSkills: string[];
+        matchedSkillsRequired: string[];
+      }
+    >
+  >({});
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
 
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [exiting, setExiting] = useState<Direction | null>(null);
   const dragStartX = useRef(0);
+
+  // Fetch skill matches from LLM when component mounts and user has skills
+  useEffect(() => {
+    if (!userSkills || userSkills.length === 0) return;
+
+    const fetchMatches = async () => {
+      setIsLoadingMatches(true);
+      try {
+        const response = await fetch("/api/match-skills", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userSkills,
+            jobs: cards.map((job) => ({
+              uuid: job.uuid,
+              title: job.title,
+              transferableSkills: job.transferableSkills,
+              skillsRequired: job.skillsRequired,
+            })),
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setMatchedSkills(data.matches || {});
+        } else {
+          console.error("Failed to fetch skill matches");
+        }
+      } catch (error) {
+        console.error("Error fetching skill matches:", error);
+      } finally {
+        setIsLoadingMatches(false);
+      }
+    };
+
+    fetchMatches();
+  }, [userSkills]);
 
   const commit = useCallback(
     (direction: Direction) => {
@@ -142,7 +191,7 @@ export default function SwipeDeck({
 
         {next && (
           <div className="absolute inset-0 scale-95 opacity-80">
-            <JobCard job={next} />
+            <JobCard job={next} matchedSkills={matchedSkills[next.uuid]} />
           </div>
         )}
         <div
@@ -157,7 +206,7 @@ export default function SwipeDeck({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
-          <JobCard job={current} />
+          <JobCard job={current} matchedSkills={matchedSkills[current.uuid]} />
           {dragX > 40 && (
             <div className="pointer-events-none absolute left-6 top-6 rotate-[-12deg] rounded-xl border-4 border-accent-green bg-white px-3 py-1 font-display text-xl font-extrabold text-accent-green">
               INTERESTED

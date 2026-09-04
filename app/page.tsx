@@ -34,6 +34,7 @@ const STEP_ORDER: Screen[] = [
 
 interface FlowState {
   resumeFileName: string | null;
+  userSkills: string[];
   cameFromDirectEntry: boolean;
   likedJobs: JobCard[];
   roadmap: Roadmap | null;
@@ -41,6 +42,7 @@ interface FlowState {
 
 const INITIAL_STATE: FlowState = {
   resumeFileName: null,
+  userSkills: [],
   cameFromDirectEntry: false,
   likedJobs: [],
   roadmap: null,
@@ -91,8 +93,8 @@ export default function Home() {
 
       {screen === "profile" && (
         <ProfileCreation
-          onDone={({ resumeFileName, knowsTargetRole }) => {
-            setFlow((prev) => ({ ...prev, resumeFileName }));
+          onDone={({ resumeFileName, userSkills, knowsTargetRole }) => {
+            setFlow((prev) => ({ ...prev, resumeFileName, userSkills }));
             navigate(knowsTargetRole ? "direct-role" : "guided-discovery");
           }}
         />
@@ -128,6 +130,7 @@ export default function Home() {
             navigate("summary");
           }}
           onBack={onBack}
+          userSkills={flow.userSkills}
         />
       )}
 

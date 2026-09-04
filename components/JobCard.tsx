@@ -1,6 +1,16 @@
 import { formatSalaryRange, type JobCard as JobCardData } from "@/lib/jobs";
 
-function TagList({ label, items, tone }: { label: string; items: string[]; tone: "amber" | "primary" }) {
+function TagList({ 
+  label, 
+  items, 
+  tone,
+  matchedItems,
+}: { 
+  label: string; 
+  items: string[]; 
+  tone: "amber" | "primary";
+  matchedItems?: string[];
+}) {
   if (items.length === 0) return null;
   const chip =
     tone === "amber"
@@ -10,17 +20,34 @@ function TagList({ label, items, tone }: { label: string; items: string[]; tone:
     <div>
       <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-muted">{label}</p>
       <div className="flex flex-wrap gap-1.5">
-        {items.map((item) => (
-          <span key={item} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${chip}`}>
-            {item}
-          </span>
-        ))}
+        {items.map((item) => {
+          const isMatched = matchedItems && matchedItems.includes(item);
+          return (
+            <span 
+              key={item} 
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${chip} ${
+                isMatched ? "font-bold ring-2 ring-offset-1" : ""
+              } ${isMatched && tone === "amber" ? "ring-accent-amber" : isMatched && tone === "primary" ? "ring-primary" : ""}`}
+            >
+              {item}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-export default function JobCard({ job }: { job: JobCardData }) {
+export default function JobCard({ 
+  job, 
+  matchedSkills,
+}: { 
+  job: JobCardData; 
+  matchedSkills?: {
+    matchedTransferableSkills: string[];
+    matchedSkillsRequired: string[];
+  };
+}) {
   return (
     <div className="flex h-full w-full select-none flex-col overflow-hidden rounded-[2rem] border border-primary-pale bg-surface shadow-xl">
       <div className="shrink-0 bg-gradient-to-br from-primary to-primary-dark p-5 text-white">
@@ -41,7 +68,12 @@ export default function JobCard({ job }: { job: JobCardData }) {
           <p className="text-sm leading-relaxed text-ink">{job.dayToDay}</p>
         </div>
 
-        <TagList label="Transferable skills" items={job.transferableSkills} tone="amber" />
+        <TagList 
+          label="Transferable skills" 
+          items={job.transferableSkills} 
+          tone="amber"
+          matchedItems={matchedSkills?.matchedTransferableSkills}
+        />
         <TagList label="Skills required" items={job.skillsRequired} tone="primary" />
 
         <div>
