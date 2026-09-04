@@ -3,6 +3,9 @@
 import { useState } from "react";
 import ScreenShell from "../ScreenShell";
 import { IconUploadDocument } from "../icons/LatticeIcons";
+import type { ResumeFields } from "@/lib/llm/extractResume";
+
+type UploadState = "idle" | "parsing" | "done" | "error";
 
 export default function ProfileCreation({
   onDone,
@@ -102,7 +105,11 @@ export default function ProfileCreation({
           className="watermark-bg flex cursor-pointer flex-col items-center gap-2 rounded-[1.5rem] border-2 border-dashed border-primary-light bg-primary-pale/30 px-4 py-10 text-center transition hover:border-primary hover:bg-primary-pale/60"
         >
           <span className="relative flex flex-col items-center gap-2 rounded-full bg-white px-6 py-5 shadow-sm">
-            <IconUploadDocument className="h-8 w-8 text-primary" />
+            {uploadState === "parsing" ? (
+              <span className="h-8 w-8 animate-spin rounded-full border-4 border-primary-pale border-t-primary" />
+            ) : (
+              <IconUploadDocument className="h-8 w-8 text-primary" />
+            )}
             <span className="text-sm font-bold text-ink">
               {isExtracting ? "Analyzing resume..." : resumeFileName ?? "Click to upload"}
             </span>
@@ -116,7 +123,7 @@ export default function ProfileCreation({
           </span>
           <input
             type="file"
-            accept=".pdf,.doc,.docx"
+            accept=".pdf,.docx"
             className="hidden"
             onChange={handleFileChange}
             disabled={isExtracting}

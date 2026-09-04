@@ -1,4 +1,5 @@
 import { SAMPLE_JOBS, type JobCard } from "./jobs";
+import type { MarketSnapshot } from "./mycareersfuture";
 
 export interface SkillGap {
   skill: string;
@@ -94,39 +95,86 @@ export function buildRoadmapFromLikedJobs(likedJobs: JobCard[]): Roadmap {
   };
 }
 
-/** Direct Role Entry path — best-effort match against the sample dataset since there's no live role/skills database wired up yet. */
-export function buildRoadmapForRole(roleName: string): Roadmap {
+async function fetchMarketSnapshotSafely(role: string): Promise<MarketSnapshot | null> {
+  try {
+    const res = await fetch("/api/market", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.status === "ok" ? (json.data as MarketSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeSkillSources(match: JobCard | undefined, market: MarketSnapshot | null): SkillGap[] {
+  const bySkill = new Map<string, SkillGap>();
+
+  if (match) {
+    for (const skill of match.skillsRequired) {
+      bySkill.set(skill.toLowerCase(), { skill, count: 1, roles: [match.title] });
+    }
+  }
+
+  if (market) {
+    for (const { skill, count } of market.topSkills) {
+      const key = skill.toLowerCase();
+      const existing = bySkill.get(key);
+      if (existing) {
+        existing.count += count;
+      } else {
+        bySkill.set(key, { skill, count, roles: ["Live job postings"] });
+      }
+    }
+  }
+
+  return [...bySkill.values()].sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Direct Role Entry path. Matches the sample dataset (lib/jobs.ts) for a
+ * human-written description of the role, and pulls live MyCareersFuture
+ * postings (via /api/market — see lib/mycareersfuture.ts) for the skill
+ * ranking itself, so the gaps reflect today's demand rather than the
+ * static sample snapshot. Live data is additive: a role with no sample
+ * match can still get a full roadmap from live postings alone.
+ */
+export async function buildRoadmapForRole(roleName: string): Promise<Roadmap> {
   const trimmed = roleName.trim();
   const normalized = trimmed.toLowerCase();
   const match = SAMPLE_JOBS.find(
     (job) => job.title.toLowerCase().includes(normalized) || normalized.includes(job.title.toLowerCase())
   );
 
-  if (!match) {
+  const market = await fetchMarketSnapshotSafely(trimmed);
+  const skillGaps = mergeSkillSources(match, market);
+
+  if (skillGaps.length === 0) {
     return {
       targetLabel: trimmed,
       skillGaps: [],
       phases: [],
       unlocks: {
-        headline: `We don't have skills data for "${trimmed}" yet — this demo only knows the roles in the sample deck. Try "Explore other roles" below instead.`,
+        headline: `We couldn't find skills data for "${trimmed}" — not in our sample deck, and no live postings matched either. Try "Explore other roles" below instead.`,
         roles: [],
       },
     };
   }
 
-  const skillGaps: SkillGap[] = match.skillsRequired.map((skill) => ({
-    skill,
-    count: 1,
-    roles: [match.title],
-  }));
-
+  const label = match?.title ?? trimmed;
   return {
-    targetLabel: match.title,
+    targetLabel: label,
     skillGaps,
     phases: phaseSkillGaps(skillGaps),
     unlocks: {
-      headline: `Closing these gaps sets you up for ${match.title} and similar roles.`,
-      roles: [match.title],
+      headline:
+        market && market.postings.length > 0
+          ? `Closing these gaps sets you up for ${label} and similar roles — ranked against ${market.postings.length} live postings across ${market.queriedRoles.length} related role${market.queriedRoles.length === 1 ? "" : "s"}.`
+          : `Closing these gaps sets you up for ${label} and similar roles.`,
+      roles: [label],
     },
   };
 }
