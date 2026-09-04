@@ -68,7 +68,8 @@ export default function SwipeDeck({
           const data = await response.json();
           setMatchedSkills(data.matches || {});
         } else {
-          console.error("Failed to fetch skill matches");
+          const errorBody = await response.json().catch(() => null);
+          console.error("Failed to fetch skill matches:", response.status, errorBody?.error ?? "(no error body)");
         }
       } catch (error) {
         console.error("Error fetching skill matches:", error);
