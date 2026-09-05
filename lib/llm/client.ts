@@ -1,6 +1,6 @@
 import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
 
-// This project's LLM credentials are AWS SSO (see AWS_SETUP.md), not a
+// This project's LLM credentials are AWS SSO (see docs/AWS_SETUP.md), not a
 // direct ANTHROPIC_API_KEY — so this goes through Bedrock, not the
 // first-party Anthropic() client.
 //
@@ -10,7 +10,7 @@ import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
 // action, confirmed live 2026-09-03. Model IDs are "global." cross-region
 // inference profiles (see BEDROCK_MODEL below) — this account has no
 // on-demand throughput for bare model IDs, confirmed live the same day.
-// Region matches AWS_SETUP.md's ap-southeast-1.
+// Region matches docs/AWS_SETUP.md's ap-southeast-1.
 let client: AnthropicBedrock | null = null;
 
 /** Lazy singleton so importing this module never throws when credentials are unset/expired. */
