@@ -71,7 +71,7 @@ export default function JobCard({
 
         <div>
           <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-muted">Day to day</p>
-          <p className="text-sm leading-relaxed text-ink">{job.dayToDay}</p>
+          <p className="whitespace-pre-line text-sm leading-relaxed text-ink">{job.dayToDay}</p>
         </div>
 
         <TagList 

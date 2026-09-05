@@ -5,9 +5,11 @@ import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-r
 // bedrock:InvokeModel for every anthropic.* model (confirmed live
 // 2026-09-05, both legacy and current Claude model IDs) — only Amazon's
 // own Nova models are allowed. So this goes through the plain AWS Bedrock
-// Converse API with Nova, not the Anthropic SDK. Nova Micro is text-only
-// (no image/document input) — see extractResume.ts's comment on what that
-// means for PDF parsing.
+// Converse API with Nova, not the Anthropic SDK. Default is Nova Lite —
+// bumped up from Nova Micro after Micro gave noticeably weaker semantic
+// judgment on matchSkills.ts's fuzzy skill-matching task. Both Micro and
+// Lite are text-only (no image/document input) — see extractResume.ts's
+// comment on what that means for PDF parsing.
 let client: BedrockRuntimeClient | null = null;
 
 /** Lazy singleton so importing this module never throws when credentials are unset/expired. */
@@ -34,7 +36,7 @@ interface ConverseOptions {
 export async function converseText(prompt: string, opts: ConverseOptions = {}): Promise<string> {
   const res = await getBedrockClient().send(
     new ConverseCommand({
-      modelId: opts.model ?? BEDROCK_MODEL.novaMicro,
+      modelId: opts.model ?? BEDROCK_MODEL.novaLite,
       system: opts.system ? [{ text: opts.system }] : undefined,
       messages: [{ role: "user", content: [{ text: prompt }] }],
       inferenceConfig: { maxTokens: opts.maxTokens ?? 1000, temperature: opts.temperature ?? 0.4 },
@@ -51,7 +53,7 @@ export async function converseText(prompt: string, opts: ConverseOptions = {}): 
  * a single-tool call with the desired schema as its input gets the same
  * result — Bedrock parses and validates the arguments for us, no manual
  * JSON.parse or markdown-fence-stripping needed. Verified live against
- * Nova Micro 2026-09-05.
+ * Nova Micro and Nova Lite 2026-09-05.
  */
 export async function converseJson<T>(
   prompt: string,
@@ -61,7 +63,7 @@ export async function converseJson<T>(
   const TOOL_NAME = "return_result";
   const res = await getBedrockClient().send(
     new ConverseCommand({
-      modelId: opts.model ?? BEDROCK_MODEL.novaMicro,
+      modelId: opts.model ?? BEDROCK_MODEL.novaLite,
       system: opts.system ? [{ text: opts.system }] : undefined,
       messages: [{ role: "user", content: [{ text: prompt }] }],
       inferenceConfig: { maxTokens: opts.maxTokens ?? 1500, temperature: opts.temperature ?? 0.2 },
