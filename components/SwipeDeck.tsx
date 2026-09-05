@@ -10,21 +10,21 @@ const EXIT_ANIMATION_MS = 220;
 
 type Direction = "left" | "right";
 
-// Static data, already in a mixed (non-alphabetical, non-salary-ordered)
-// order — no runtime shuffle needed. If this deck is ever backed by dynamic
-// data again, randomize server-side and pass the order down as a prop
-// instead of calling Math.random() during client render (SSR/CSR mismatch).
-const cards: JobCardData[] = SAMPLE_JOBS;
-
 export default function SwipeDeck({
+  jobs,
   onComplete,
   onBack,
   userSkills,
 }: {
+  // Industry-scoped live roles from the guided-discovery flow; falls back
+  // to the static sample deck if empty (live fetch failed/too sparse) or
+  // omitted entirely (e.g. re-entering from "explore other roles").
+  jobs?: JobCardData[];
   onComplete: (liked: JobCardData[]) => void;
   onBack?: () => void;
   userSkills?: string[];
 }) {
+  const cards = jobs && jobs.length > 0 ? jobs : SAMPLE_JOBS;
   const [index, setIndex] = useState(0);
   const [liked, setLiked] = useState<JobCardData[]>([]);
   const [matchedSkills, setMatchedSkills] = useState<
@@ -79,7 +79,7 @@ export default function SwipeDeck({
     };
 
     fetchMatches();
-  }, [userSkills]);
+  }, [userSkills, cards]);
 
   const commit = useCallback(
     (direction: Direction) => {
@@ -95,7 +95,7 @@ export default function SwipeDeck({
         setDragX(0);
       }, EXIT_ANIMATION_MS);
     },
-    [index, exiting]
+    [index, exiting, cards]
   );
 
   function onPointerDown(e: React.PointerEvent) {

@@ -22,6 +22,8 @@ export interface Roadmap {
     headline: string;
     roles: string[];
   };
+  /** Live postings snapshot, when one was fetched (Direct Role Entry only — see buildRoadmapForRole). */
+  market: MarketSnapshot | null;
 }
 
 // NOTE: everything in this file is deterministic (frequency counts + array
@@ -92,6 +94,7 @@ export function buildRoadmapFromLikedJobs(likedJobs: JobCard[]): Roadmap {
           : "You already liked roles with no common skill gaps — you're well matched already.",
       roles: unlockedRoles.map((j) => j.title),
     },
+    market: null,
   };
 }
 
@@ -161,6 +164,7 @@ export async function buildRoadmapForRole(roleName: string): Promise<Roadmap> {
         headline: `We couldn't find skills data for "${trimmed}" — not in our sample deck, and no live postings matched either. Try "Explore other roles" below instead.`,
         roles: [],
       },
+      market,
     };
   }
 
@@ -176,5 +180,6 @@ export async function buildRoadmapForRole(roleName: string): Promise<Roadmap> {
           : `Closing these gaps sets you up for ${label} and similar roles.`,
       roles: [label],
     },
+    market,
   };
 }

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import ScreenShell from "../ScreenShell";
 import { STUDY_HOURS_OPTIONS, URGENCY_OPTIONS, type Constraints, type Urgency } from "@/lib/constraints";
+import { INDUSTRIES } from "@/lib/industries";
+import type { JobCard } from "@/lib/jobs";
 
 const REMOTE_OPTIONS = ["Remote only", "Hybrid", "On-site is fine", "No preference"] as const;
 
@@ -39,7 +41,7 @@ export default function GuidedDiscoveryIntro({
   onSubmit,
   onBack,
 }: {
-  onSubmit: (constraints: Constraints) => void;
+  onSubmit: (constraints: Constraints, jobs: JobCard[]) => void;
   onBack?: () => void;
 }) {
   const [remotePreference, setRemotePreference] = useState<string | null>(null);
@@ -47,18 +49,40 @@ export default function GuidedDiscoveryIntro({
   const [urgency, setUrgency] = useState<Urgency | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
   const [creditInput, setCreditInput] = useState("");
+  const [industryId, setIndustryId] = useState<string | null>(null);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const canSubmit = remotePreference !== null && studyHoursPerWeek !== null && urgency !== null;
+  const canSubmit = remotePreference !== null && studyHoursPerWeek !== null && urgency !== null && industryId !== null;
 
-  function handleSubmit() {
-    if (!canSubmit) return;
-    onSubmit({
+  async function handleSubmit() {
+    if (!canSubmit || isLoadingRoles) return;
+    setIsLoadingRoles(true);
+    setLoadError(null);
+
+    const constraints: Constraints = {
       remotePreference: remotePreference!,
       studyHoursPerWeek: studyHoursPerWeek!,
       urgency: urgency!,
       budgetSgd: budgetInput.trim() ? Number(budgetInput) : null,
       skillsFutureCreditSgd: creditInput.trim() ? Number(creditInput) : null,
-    });
+    };
+
+    try {
+      const response = await fetch("/api/industry-roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ industryId }),
+      });
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      const data = await response.json();
+      onSubmit(constraints, data.cards as JobCard[]);
+    } catch {
+      setLoadError("Couldn't pull live roles right now — showing a sample deck instead.");
+      onSubmit(constraints, []);
+    } finally {
+      setIsLoadingRoles(false);
+    }
   }
 
   return (
@@ -68,6 +92,15 @@ export default function GuidedDiscoveryIntro({
       onBack={onBack}
     >
       <div className="space-y-6">
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">Which industry interests you?</p>
+          <ChipGroup
+            options={INDUSTRIES.map((i) => ({ label: i.label, value: i.id }))}
+            selected={industryId}
+            onSelect={setIndustryId}
+          />
+        </div>
+
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">Work setup</p>
           <ChipGroup options={REMOTE_OPTIONS.map((o) => ({ label: o, value: o }))} selected={remotePreference} onSelect={setRemotePreference} />
@@ -117,12 +150,14 @@ export default function GuidedDiscoveryIntro({
         </div>
       </div>
 
+      {loadError && <p className="mt-4 text-center text-xs font-semibold text-accent-coral">{loadError}</p>}
+
       <button
         onClick={handleSubmit}
-        disabled={!canSubmit}
+        disabled={!canSubmit || isLoadingRoles}
         className="mt-6 w-full rounded-full bg-primary px-4 py-3.5 font-display text-sm font-bold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-40"
       >
-        Show me roles
+        {isLoadingRoles ? "Pulling live roles…" : "Show me roles"}
       </button>
     </ScreenShell>
   );

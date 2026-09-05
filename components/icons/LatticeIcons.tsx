@@ -58,6 +58,38 @@ export function IconBackArrow({ className }: IconProps) {
   );
 }
 
+// Hero brand mark. A hex lattice — the "network of possible roles" — with
+// one route through it picked out in green from a start node to a filled
+// gold destination node, echoing the roadmap/pathway the app actually
+// produces. Multi-tone by design (not a currentColor glyph like the nav
+// icons above), so it always renders in the app's own palette regardless
+// of surrounding text color.
+export function IconLatticeMark({ className }: IconProps) {
+  const nodes = [
+    { x: 80, y: 50 }, // 0°   — destination
+    { x: 65, y: 24.02 }, // 60°
+    { x: 35, y: 24.02 }, // 120°
+    { x: 20, y: 50 }, // 180° — start
+    { x: 35, y: 75.98 }, // 240°
+    { x: 65, y: 75.98 }, // 300°
+  ];
+  const ring = nodes.map((n) => `${n.x},${n.y}`).join(" ");
+  const path = `M${nodes[3].x} ${nodes[3].y} L${nodes[4].x} ${nodes[4].y} L${nodes[5].x} ${nodes[5].y} L${nodes[0].x} ${nodes[0].y}`;
+
+  return (
+    <svg viewBox="0 0 100 100" fill="none" className={className} aria-hidden="true">
+      <polygon points={ring} className="stroke-primary-light" strokeWidth="2.5" strokeLinejoin="round" opacity="0.6" />
+      <path d={path} className="stroke-accent-green" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={nodes[1].x} cy={nodes[1].y} r="6" className="fill-primary-pale stroke-primary" strokeWidth="2.5" />
+      <circle cx={nodes[2].x} cy={nodes[2].y} r="6" className="fill-primary-pale stroke-primary" strokeWidth="2.5" />
+      <circle cx={nodes[4].x} cy={nodes[4].y} r="6" className="fill-primary-pale stroke-accent-green" strokeWidth="2.5" />
+      <circle cx={nodes[5].x} cy={nodes[5].y} r="6" className="fill-primary-pale stroke-accent-green" strokeWidth="2.5" />
+      <circle cx={nodes[3].x} cy={nodes[3].y} r="7" className="fill-primary-dark" />
+      <circle cx={nodes[0].x} cy={nodes[0].y} r="9" className="fill-accent-amber stroke-surface" strokeWidth="2.5" />
+    </svg>
+  );
+}
+
 // Replaces the placeholder document emoji on the resume-upload screen.
 export function IconUploadDocument({ className }: IconProps) {
   return (

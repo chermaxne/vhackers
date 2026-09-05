@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import ScreenShell from "../ScreenShell";
 import type { Roadmap } from "@/lib/roadmap";
 import { buildSkillsFutureSearchUrl } from "@/lib/skillsfuture";
 import { estimatePhaseWeeks, type Constraints } from "@/lib/constraints";
 import { buildFirstStudyBlock, buildGoogleCalendarUrl, downloadIcs } from "@/lib/calendar";
+import { computeCandidacyScore, type CandidacyScore } from "@/lib/candidacyScore";
+import { encodeRoadmapExport } from "@/lib/roadmapExport";
 
 const URGENCY_LABELS: Record<Constraints["urgency"], string> = {
   asap: "ASAP",
@@ -18,27 +21,97 @@ const PHASE_STYLES = [
   { badge: "bg-accent-green", chip: "border-accent-green/40 bg-accent-green-pale/60" },
 ];
 
+const BAND_STYLES: Record<CandidacyScore["band"], { ring: string; chip: string }> = {
+  strong: { ring: "text-accent-green", chip: "bg-accent-green-pale text-green-900" },
+  building: { ring: "text-accent-olive", chip: "bg-accent-olive-pale text-ink" },
+  early: { ring: "text-accent-coral", chip: "bg-accent-coral-pale text-red-900" },
+};
+
 export default function RoadmapUnlocked({
   roadmap,
   constraints,
   resumeText,
+  userSkills,
   onExploreOtherRoles,
   onTailorResume,
+  onPrepareInterview,
   onRestart,
   onBack,
 }: {
   roadmap: Roadmap;
   constraints?: Constraints | null;
   resumeText?: string | null;
+  userSkills?: string[];
   onExploreOtherRoles?: () => void;
   onTailorResume?: () => void;
+  onPrepareInterview?: () => void;
   onRestart: () => void;
   onBack?: () => void;
 }) {
   const studyBlock = buildFirstStudyBlock(roadmap, constraints?.studyHoursPerWeek);
+  const candidacy =
+    roadmap.skillGaps.length > 0 ? computeCandidacyScore(roadmap.skillGaps, userSkills ?? [], roadmap.market) : null;
+
+  const [rationale, setRationale] = useState<string | null>(null);
+  const [shareState, setShareState] = useState<"idle" | "copied">("idle");
+
+  useEffect(() => {
+    if (!candidacy) return;
+    let cancelled = false;
+    fetch("/api/candidacy-rationale", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidacy, targetRole: roadmap.targetLabel, postingsCount: roadmap.market?.postings.length ?? 0 }),
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled && json.status === "ok") setRationale(json.data.sentence as string);
+      })
+      .catch(() => {
+        // Rationale is a nice-to-have — the score/band chip already carries the signal.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // candidacy/roadmap are derived fresh from flow state each time this screen mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleShare() {
+    const payload = encodeRoadmapExport({
+      targetRole: roadmap.targetLabel,
+      candidacy: candidacy ? { score: candidacy.score, band: candidacy.band, bandLabel: candidacy.bandLabel } : null,
+      skillGapList: roadmap.skillGaps.map((g) => g.skill),
+      roadmapSteps: roadmap.skillGaps.map((g) => ({ skill: g.skill, courseLink: buildSkillsFutureSearchUrl(g.skill) })),
+      introCopy: roadmap.unlocks.headline,
+    });
+    const url = `${window.location.origin}/roadmap/view?data=${payload}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShareState("copied");
+      setTimeout(() => setShareState("idle"), 2000);
+    });
+  }
 
   return (
     <ScreenShell title="Your roadmap" subtitle={`Toward: ${roadmap.targetLabel}`} onBack={onBack}>
+      {candidacy && (
+        <div className="mb-5 flex items-center gap-3 rounded-2xl border-2 border-primary-pale bg-white p-4">
+          <div
+            className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-4 font-display text-sm font-extrabold ${BAND_STYLES[candidacy.band].ring} border-current`}
+          >
+            {candidacy.score}
+          </div>
+          <div className="min-w-0">
+            <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-bold ${BAND_STYLES[candidacy.band].chip}`}>
+              {candidacy.bandLabel}
+            </span>
+            <p className="mt-1 text-xs leading-snug text-ink-muted">
+              {rationale ?? `${candidacy.skillCoveragePct}% skill coverage against live demand for ${roadmap.targetLabel}.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {constraints && roadmap.phases.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-2 rounded-2xl bg-primary-pale/40 px-4 py-3 text-xs font-semibold text-primary-dark">
           <span>⏱ {constraints.studyHoursPerWeek} hrs/week</span>
@@ -126,6 +199,22 @@ export default function RoadmapUnlocked({
       )}
 
       <div className="mt-6 flex flex-col gap-2">
+        {roadmap.phases.length > 0 && (
+          <button
+            onClick={handleShare}
+            className="w-full rounded-full border-2 border-primary-pale bg-white px-4 py-3.5 font-display text-sm font-bold text-primary-dark transition hover:bg-primary-pale/40"
+          >
+            {shareState === "copied" ? "Link copied ✓" : "Share my roadmap ↗"}
+          </button>
+        )}
+        {onPrepareInterview && (
+          <button
+            onClick={onPrepareInterview}
+            className="w-full rounded-full bg-primary px-4 py-3.5 font-display text-sm font-bold text-white transition hover:bg-primary-dark"
+          >
+            Prepare for interviews
+          </button>
+        )}
         {resumeText && onTailorResume && (
           <button
             onClick={onTailorResume}

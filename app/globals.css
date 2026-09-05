@@ -20,6 +20,11 @@
   --accent-amber-pale: #fff4df;
   --accent-coral: #c07676;
   --accent-coral-pale: #f2e4e4;
+  /* Distinct from --accent-amber (a decorative secondary accent) — this is
+     the mid-tier status color for three-tier scales (candidacy score,
+     roadmap progress), matching the original style doc's olive/tan-green. */
+  --accent-olive: #adb56f;
+  --accent-olive-pale: #eef0e1;
 
   --ink: #3d4372;
   --ink-muted: #8790c0;
@@ -40,6 +45,8 @@
   --color-accent-amber-pale: var(--accent-amber-pale);
   --color-accent-coral: var(--accent-coral);
   --color-accent-coral-pale: var(--accent-coral-pale);
+  --color-accent-olive: var(--accent-olive);
+  --color-accent-olive-pale: var(--accent-olive-pale);
 
   --color-ink: var(--ink);
   --color-ink-muted: var(--ink-muted);

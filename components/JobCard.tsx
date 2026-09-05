@@ -77,9 +77,21 @@ export default function JobCard({
         <TagList label="Skills required" items={job.skillsRequired} tone="primary" />
 
         <div>
-          <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-muted">Career progression</p>
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-muted">Role details</p>
           <p className="text-sm leading-relaxed text-ink">{job.careerProgression}</p>
         </div>
+
+        {job.jobUrl && (
+          <a
+            href={job.jobUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-xs font-bold text-primary underline underline-offset-2"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            View original posting on MyCareersFuture ↗
+          </a>
+        )}
       </div>
     </div>
   );
