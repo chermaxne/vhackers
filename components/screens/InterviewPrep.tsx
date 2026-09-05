@@ -71,7 +71,7 @@ export default function InterviewPrep({ input, onBack }: { input: InterviewPrepI
                 </span>
                 <p className="mt-2 font-display text-sm font-extrabold text-ink">{q.question}</p>
                 <p className="mt-1.5 text-xs text-ink-muted">Why they ask this: {q.whyAsked}</p>
-                <p className="mt-2 rounded-xl bg-accent-green-pale/60 px-3 py-2 text-xs font-semibold text-ink">
+                <p className="mt-2 rounded-xl bg-accent-green-pale/60 px-3 py-2.5 text-xs leading-relaxed text-ink">
                   💡 {q.suggestedTalkingPoint}
                 </p>
               </div>

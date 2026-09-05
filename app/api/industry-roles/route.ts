@@ -5,6 +5,8 @@ import { SAMPLE_JOBS, type JobCard } from "@/lib/jobs";
 
 export interface IndustryRolesRequest {
   industryId: string;
+  /** Caller-supplied cap (e.g. splitting a total deck-size target across several selected industries) — falls back to MAX_CARDS. */
+  limit?: number;
 }
 
 const MIN_LIVE_POSTINGS = 3;
@@ -51,11 +53,12 @@ function toJobCard(posting: CategoryPosting, detail: JobDetail | null): JobCard 
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const { industryId } = (await request.json()) as IndustryRolesRequest;
+    const { industryId, limit } = (await request.json()) as IndustryRolesRequest;
     const industry = findIndustry(industryId);
     if (!industry) {
       return NextResponse.json({ error: `Unknown industry: "${industryId}"` }, { status: 400 });
     }
+    const cardLimit = limit && limit > 0 ? Math.min(limit, MAX_CARDS) : MAX_CARDS;
 
     let cards: JobCard[];
     let source: "live" | "sample";
@@ -63,7 +66,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // MyCareersFuture's `limit` param isn't honored by /v2/search (it
       // always returns a fixed ~20-result page) — slice client-side.
       const allPostings = await searchByCategory(industry.category, MAX_CARDS, 0);
-      const postings = allPostings.slice(0, MAX_CARDS);
+      const postings = allPostings.slice(0, cardLimit);
       if (postings.length < MIN_LIVE_POSTINGS) {
         cards = SAMPLE_JOBS;
         source = "sample";

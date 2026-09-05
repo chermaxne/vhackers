@@ -2,24 +2,22 @@
 
 import { useEffect, useState } from "react";
 import ScreenShell from "../ScreenShell";
+import CourseRoadmap from "./CourseRoadmap";
 import type { Roadmap } from "@/lib/roadmap";
-import { buildSkillsFutureSearchUrl } from "@/lib/skillsfuture";
 import { estimatePhaseWeeks, type Constraints } from "@/lib/constraints";
 import { buildFirstStudyBlock, buildGoogleCalendarUrl, downloadIcs } from "@/lib/calendar";
 import { computeCandidacyScore, type CandidacyScore } from "@/lib/candidacyScore";
 import { encodeRoadmapExport } from "@/lib/roadmapExport";
+import { buildSkillsFutureSearchUrl } from "@/lib/skillsfuture";
+import { flattenRoadmapSteps } from "@/lib/roadmapVisual";
+import { getRoadmapProgressKey, loadRoadmapProgress, saveRoadmapProgress } from "@/lib/roadmapProgress";
+import { getBudgetKey, loadBudget, saveBudget, type StepBudgetEntry } from "@/lib/roadmapBudget";
 
 const URGENCY_LABELS: Record<Constraints["urgency"], string> = {
   asap: "ASAP",
   few_months: "Within 3 months",
   no_rush: "No rush",
 };
-
-const PHASE_STYLES = [
-  { badge: "bg-primary", chip: "border-primary-light bg-primary-pale/50" },
-  { badge: "bg-accent-amber", chip: "border-accent-amber/40 bg-accent-amber-pale/60" },
-  { badge: "bg-accent-green", chip: "border-accent-green/40 bg-accent-green-pale/60" },
-];
 
 const BAND_STYLES: Record<CandidacyScore["band"], { ring: string; chip: string }> = {
   strong: { ring: "text-accent-green", chip: "bg-accent-green-pale text-green-900" },
@@ -30,20 +28,16 @@ const BAND_STYLES: Record<CandidacyScore["band"], { ring: string; chip: string }
 export default function RoadmapUnlocked({
   roadmap,
   constraints,
-  resumeText,
   userSkills,
   onExploreOtherRoles,
-  onTailorResume,
   onPrepareInterview,
   onRestart,
   onBack,
 }: {
   roadmap: Roadmap;
   constraints?: Constraints | null;
-  resumeText?: string | null;
   userSkills?: string[];
   onExploreOtherRoles?: () => void;
-  onTailorResume?: () => void;
   onPrepareInterview?: () => void;
   onRestart: () => void;
   onBack?: () => void;
@@ -54,6 +48,37 @@ export default function RoadmapUnlocked({
 
   const [rationale, setRationale] = useState<string | null>(null);
   const [shareState, setShareState] = useState<"idle" | "copied">("idle");
+  const steps = flattenRoadmapSteps(roadmap);
+  const progressKey = getRoadmapProgressKey(
+    roadmap.targetLabel,
+    steps.map((s) => s.id)
+  );
+  // Lazy initializer, not an effect — this component remounts per roadmap
+  // (JourneyFlow only ever renders one at a time), so reading localStorage
+  // once at mount is enough; no need to re-sync on every render.
+  const [completed, setCompleted] = useState<Record<string, boolean>>(() => loadRoadmapProgress(progressKey));
+
+  function toggleStepCompletion(stepId: string) {
+    setCompleted((prev) => {
+      const next = { ...prev, [stepId]: !prev[stepId] };
+      saveRoadmapProgress(progressKey, next);
+      return next;
+    });
+  }
+
+  const budgetKey = getBudgetKey(
+    roadmap.targetLabel,
+    steps.map((s) => s.id)
+  );
+  const [budget, setBudget] = useState<Record<string, StepBudgetEntry>>(() => loadBudget(budgetKey));
+
+  function updateStepBudget(stepId: string, entry: StepBudgetEntry) {
+    setBudget((prev) => {
+      const next = { ...prev, [stepId]: entry };
+      saveBudget(budgetKey, next);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!candidacy) return;
@@ -128,47 +153,26 @@ export default function RoadmapUnlocked({
       {roadmap.phases.length === 0 ? (
         <p className="text-sm text-ink-muted">{roadmap.unlocks.headline}</p>
       ) : (
-        <div className="space-y-5">
-          {roadmap.phases.map((phase, i) => {
-            const style = PHASE_STYLES[i % PHASE_STYLES.length];
-            return (
-              <div key={phase.name}>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`flex h-7 w-7 items-center justify-center rounded-full font-display text-xs font-bold text-white ${style.badge}`}
-                  >
-                    {i + 1}
-                  </span>
-                  <p className="font-display text-sm font-extrabold text-ink">{phase.name}</p>
-                  {constraints && (
-                    <span className="text-xs font-semibold text-ink-muted">
-                      · ~{estimatePhaseWeeks(phase.skills.length, constraints.studyHoursPerWeek)} wks
-                    </span>
-                  )}
-                </div>
-                <p className="ml-9 mt-0.5 text-xs text-ink-muted">{phase.description}</p>
-                <ul className="ml-9 mt-2 space-y-1.5">
-                  {phase.skills.map((skill) => (
-                    <li
-                      key={skill}
-                      className={`flex items-center justify-between gap-3 rounded-2xl border-2 px-3.5 py-2.5 text-sm ${style.chip}`}
-                    >
-                      <span className="font-semibold text-ink">{skill}</span>
-                      <a
-                        href={buildSkillsFutureSearchUrl(skill)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 text-xs font-semibold text-primary-dark underline decoration-primary-light underline-offset-2 hover:text-primary"
-                      >
-                        Find a course ↗
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
+        <>
+          <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1">
+            {roadmap.phases.map((phase, i) => (
+              <p key={phase.name} className="text-xs text-ink-muted">
+                <span className="font-bold text-ink">
+                  {i + 1}. {phase.name}
+                </span>
+                {constraints && <> · ~{estimatePhaseWeeks(phase.skills.length, constraints.studyHoursPerWeek)} wks</>}
+              </p>
+            ))}
+          </div>
+          <CourseRoadmap
+            roadmap={roadmap}
+            completed={completed}
+            onToggle={toggleStepCompletion}
+            budget={budget}
+            onBudgetChange={updateStepBudget}
+            skillsFutureCreditSgd={constraints?.skillsFutureCreditSgd}
+          />
+        </>
       )}
 
       {studyBlock && (
@@ -195,6 +199,10 @@ export default function RoadmapUnlocked({
               Download .ics
             </button>
           </div>
+          <p className="mt-3 flex items-start gap-1.5 text-[11px] font-semibold text-ink-muted">
+            <span>👁</span>
+            <span>Both open a draft for you to review — nothing is added to your calendar until you confirm it yourself.</span>
+          </p>
         </div>
       )}
 
@@ -213,14 +221,6 @@ export default function RoadmapUnlocked({
             className="w-full rounded-full bg-primary px-4 py-3.5 font-display text-sm font-bold text-white transition hover:bg-primary-dark"
           >
             Prepare for interviews
-          </button>
-        )}
-        {resumeText && onTailorResume && (
-          <button
-            onClick={onTailorResume}
-            className="w-full rounded-full bg-primary px-4 py-3.5 font-display text-sm font-bold text-white transition hover:bg-primary-dark"
-          >
-            Tailor my resume for this role
           </button>
         )}
         {onExploreOtherRoles && (

@@ -34,10 +34,31 @@ export interface Roadmap {
 // (see git history — components/JobCard.tsx used the same pattern) once
 // credits are sorted.
 
+/**
+ * MyCareersFuture's own auto-tagged `skills` field mixes real, named
+ * skills/tools ("SQL", "Tableau", "Active Directory" — reliably
+ * capitalized) with extracted sentence fragments from job-description prose
+ * ("shifts schedules", "managing end to end production", "user friendly
+ * tools" — reliably all-lowercase, since they're not proper nouns). There's
+ * no ground-truth "is this a real skill" source to check against, so this
+ * is a heuristic, not a verified filter — it drops the worst offenders
+ * without claiming perfect precision.
+ */
+function isLikelySkill(skill: string): boolean {
+  const trimmed = skill.trim();
+  if (trimmed.length === 0 || trimmed.length > 45) return false;
+  const words = trimmed.split(/\s+/);
+  if (words.length > 5) return false;
+  const hasAnyCapital = /[A-Z]/.test(trimmed);
+  if (words.length >= 2 && !hasAnyCapital) return false;
+  return true;
+}
+
 export function aggregateSkillGaps(jobs: JobCard[]): SkillGap[] {
   const bySkill = new Map<string, SkillGap>();
   for (const job of jobs) {
     for (const skill of job.skillsRequired) {
+      if (!isLikelySkill(skill)) continue;
       const existing = bySkill.get(skill);
       if (existing) {
         existing.count += 1;
@@ -50,9 +71,16 @@ export function aggregateSkillGaps(jobs: JobCard[]): SkillGap[] {
   return [...bySkill.values()].sort((a, b) => b.count - a.count);
 }
 
-export function phaseSkillGaps(gaps: SkillGap[]): RoadmapPhase[] {
+// Caps the *displayed* roadmap to the highest-signal skills only — gaps are
+// already ranked by count (how many roles/postings ask for them) — rather
+// than dumping every skill ever mentioned, down to one-off legacy tags, into
+// a single course plan. roadmap.skillGaps itself stays uncapped (candidacy
+// score / SkillGapScreen need the full picture); only the phase display trims.
+const MAX_ROADMAP_SKILLS = 9;
+
+export function phaseSkillGaps(gaps: SkillGap[], maxSkills = MAX_ROADMAP_SKILLS): RoadmapPhase[] {
   if (gaps.length === 0) return [];
-  const skills = gaps.map((g) => g.skill);
+  const skills = gaps.slice(0, maxSkills).map((g) => g.skill);
   const chunkSize = Math.ceil(skills.length / 3);
   const phases: RoadmapPhase[] = [
     {
@@ -118,12 +146,14 @@ function mergeSkillSources(match: JobCard | undefined, market: MarketSnapshot | 
 
   if (match) {
     for (const skill of match.skillsRequired) {
+      if (!isLikelySkill(skill)) continue;
       bySkill.set(skill.toLowerCase(), { skill, count: 1, roles: [match.title] });
     }
   }
 
   if (market) {
     for (const { skill, count } of market.topSkills) {
+      if (!isLikelySkill(skill)) continue;
       const key = skill.toLowerCase();
       const existing = bySkill.get(key);
       if (existing) {

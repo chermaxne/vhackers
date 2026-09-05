@@ -1,39 +1,29 @@
-import { getAnthropicClient, BEDROCK_MODEL } from "./client";
+import { converseText } from "./client";
 import type { JobCard } from "../jobs";
 import type { SkillGap } from "../roadmap";
 
 export interface InterestSummary {
   narrative: string;
-  source: "claude" | "heuristic";
+  source: "model" | "heuristic";
 }
 
-async function summarizeWithClaude(
+async function summarizeWithModel(
   likedJobs: JobCard[],
   skillGaps: SkillGap[],
   unlockedRoles: string[]
 ): Promise<InterestSummary> {
-  const client = getAnthropicClient();
   const roleList = likedJobs.map((j) => j.title).join(", ");
   const gapList = skillGaps.slice(0, 5).map((g) => g.skill).join(", ");
-  const response = await client.messages.create({
-    model: BEDROCK_MODEL.opus5,
-    max_tokens: 400,
-    messages: [
-      {
-        role: "user",
-        content:
-          `A job seeker swiped right (interested) on these roles: ${roleList}.\n` +
-          `The skills their picks most commonly ask for, that they haven't confirmed having, ` +
-          `are: ${gapList || "none"}.\n` +
-          `Closing those gaps would also open up: ${unlockedRoles.join(", ") || "no additional roles in this sample"}.\n\n` +
-          `Write a short (2-3 sentence), plain-language, encouraging summary of the pattern ` +
-          `across their picks, in second person ("you're drawn to..."). No headers, no bullet points, just prose.`,
-      },
-    ],
-  });
-  const block = response.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") throw new Error("No text content in Claude response");
-  return { narrative: block.text.trim(), source: "claude" };
+  const narrative = await converseText(
+    `A job seeker swiped right (interested) on these roles: ${roleList}.\n` +
+      `The skills their picks most commonly ask for, that they haven't confirmed having, ` +
+      `are: ${gapList || "none"}.\n` +
+      `Closing those gaps would also open up: ${unlockedRoles.join(", ") || "no additional roles in this sample"}.\n\n` +
+      `Write a short (2-3 sentence), plain-language, encouraging summary of the pattern ` +
+      `across their picks, in second person ("you're drawn to..."). No headers, no bullet points, just prose.`,
+    { maxTokens: 400 }
+  );
+  return { narrative, source: "model" };
 }
 
 // Deterministic stand-in — used automatically whenever the Claude call
@@ -84,7 +74,7 @@ export async function summarizeInterestPattern(
   unlockedRoles: string[]
 ): Promise<InterestSummary> {
   try {
-    return await summarizeWithClaude(likedJobs, skillGaps, unlockedRoles);
+    return await summarizeWithModel(likedJobs, skillGaps, unlockedRoles);
   } catch {
     return summarizeHeuristic(likedJobs, skillGaps, unlockedRoles);
   }

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Baloo_2, Nunito } from "next/font/google";
 import "./globals.css";
 
@@ -18,6 +18,14 @@ const nunitoSans = Nunito({
 export const metadata: Metadata = {
   title: "Reskilling Copilot",
   description: "Swipe to explore roles, build a skills roadmap, and see what it unlocks.",
+  appleWebApp: {
+    title: "Lattice",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#7684c0",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
