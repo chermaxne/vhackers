@@ -186,13 +186,17 @@ export default function SwipeDeck({
       </p>
 
       <div className="relative h-[580px] w-full max-w-sm">
-        {/* Decorative stacked-card peeks — echoes the reference deck's layered card look */}
+        {/* Decorative stacked-card peeks */}
         <div className="absolute inset-0 translate-x-3 translate-y-3 rotate-3 rounded-[2rem] bg-accent-amber/70" />
         <div className="absolute inset-0 -translate-x-2 translate-y-4 -rotate-2 rounded-[2rem] bg-accent-green/60" />
 
         {next && (
           <div className="absolute inset-0 scale-95 opacity-80">
-            <JobCard job={next} matchedSkills={matchedSkills[next.uuid]} />
+            <JobCard 
+              job={next} 
+              matchedSkills={matchedSkills[next.uuid]} 
+              themeIndex={index + 1} 
+            />
           </div>
         )}
         <div
@@ -207,7 +211,11 @@ export default function SwipeDeck({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
-          <JobCard job={current} matchedSkills={matchedSkills[current.uuid]} />
+          <JobCard 
+            job={current} 
+            matchedSkills={matchedSkills[current.uuid]} 
+            themeIndex={index} 
+          />
           {dragX > 40 && (
             <div className="pointer-events-none absolute left-6 top-6 rotate-[-12deg] rounded-xl border-4 border-accent-green bg-white px-3 py-1 font-display text-xl font-extrabold text-accent-green">
               INTERESTED
