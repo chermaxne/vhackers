@@ -128,7 +128,7 @@ export default function SwipeDeck({
 
   if (done) {
     return (
-      <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-[2rem] border border-primary-pale bg-surface p-6 text-center shadow-xl">
+      <div className="relative mx-auto w-full max-w-sm overflow-hidden rounded-[2rem] border border-primary-pale bg-surface p-6 pt-12 text-center shadow-xl">
         {onBack && (
           <button
             type="button"
@@ -170,7 +170,7 @@ export default function SwipeDeck({
     exiting === "right" ? "translateX(140%) rotate(20deg)" : exiting === "left" ? "translateX(-140%) rotate(-20deg)" : undefined;
 
   return (
-    <div className="relative mx-auto flex w-full max-w-sm flex-col items-center gap-6">
+    <div className="relative mx-auto flex w-full max-w-sm flex-col items-center gap-8 pt-4">
       {onBack && (
         <button
           type="button"

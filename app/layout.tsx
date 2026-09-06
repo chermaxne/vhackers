@@ -26,6 +26,10 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#7684c0",
+  // Lets the page draw under the notch/home-indicator so env(safe-area-inset-*)
+  // reports real values instead of always 0 — needed for the sticky bottom nav
+  // once this is installed as a PWA on a notched device.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

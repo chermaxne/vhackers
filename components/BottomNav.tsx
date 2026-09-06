@@ -6,7 +6,7 @@ export type AppTab = "journey" | "profile";
 
 export default function BottomNav({ active, onChange }: { active: AppTab; onChange: (tab: AppTab) => void }) {
   return (
-    <nav className="sticky bottom-4 z-20 mx-auto flex w-fit gap-2 rounded-full border border-primary-pale bg-surface p-1.5 shadow-[0_12px_30px_-16px_rgba(91,101,168,0.5)]">
+    <nav className="sticky bottom-[calc(1rem+env(safe-area-inset-bottom))] z-20 mx-auto flex w-fit gap-2 rounded-full border border-primary-pale bg-surface p-1.5 shadow-[0_12px_30px_-16px_rgba(91,101,168,0.5)]">
       <button
         type="button"
         aria-label="Journey"
