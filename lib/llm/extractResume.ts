@@ -1,20 +1,23 @@
-import { getAnthropicClient, BEDROCK_MODEL } from "./client";
+import { converseJson } from "./client";
 import { SAMPLE_JOBS } from "../jobs";
 
 export interface ResumeFields {
   currentRole: string | null;
   yearsExperience: number | null;
   skills: string[];
-  source: "claude" | "heuristic";
+  source: "model" | "heuristic";
 }
 
 /**
- * text: always present (from pdf-parse/mammoth) — used for the heuristic
- * fallback either way, and as Claude's input for DOCX.
- * pdfBase64: present only for PDF uploads. Sent to Claude as a native
- * document block instead of the pre-extracted text, so scanned/image-only
- * PDFs (which pdf-parse returns empty text for) still get read — Claude
- * handles that natively, no separate OCR step needed.
+ * text: always present (from pdf-parse/mammoth) — used for both the model
+ * call and the heuristic fallback.
+ * pdfBase64: present only for PDF uploads, kept for a Claude-era feature
+ * that's currently unused — this sandbox's SCP blocks all anthropic.*
+ * models, so extraction runs on Amazon Nova Micro instead, which is
+ * text-only (no image/document input). A scanned/image-only PDF (empty
+ * pdf-parse text) degrades honestly to mostly-null fields rather than
+ * being read natively, until either Claude access returns or this moves to
+ * a document-capable Nova tier (Lite/Pro).
  */
 export interface ResumeSource {
   text: string;
@@ -47,28 +50,16 @@ const EXTRACTION_INSTRUCTION =
   "and a flat list of concrete skills from this resume. If a field can't be determined, " +
   "use null (or an empty array for skills).";
 
-async function extractWithClaude(source: ResumeSource): Promise<ResumeFields> {
-  const client = getAnthropicClient();
-  const content = source.pdfBase64
-    ? [
-        { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: source.pdfBase64 } },
-        { type: "text" as const, text: EXTRACTION_INSTRUCTION },
-      ]
-    : `${EXTRACTION_INSTRUCTION}\n\n---\n${source.text.slice(0, 12000)}`;
-
-  const response = await client.messages.create({
-    model: BEDROCK_MODEL.sonnet5,
-    max_tokens: 1024,
-    output_config: { format: { type: "json_schema", schema: RESUME_FIELDS_SCHEMA } },
-    messages: [{ role: "user", content }],
-  });
-  const block = response.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") throw new Error("No text content in Claude response");
-  const parsed = JSON.parse(block.text) as Omit<ResumeFields, "source">;
-  return { ...parsed, source: "claude" };
+async function extractWithModel(source: ResumeSource): Promise<ResumeFields> {
+  const parsed = await converseJson<Omit<ResumeFields, "source">>(
+    `${EXTRACTION_INSTRUCTION}\n\n---\n${source.text.slice(0, 12000)}`,
+    RESUME_FIELDS_SCHEMA,
+    { maxTokens: 1024 }
+  );
+  return { ...parsed, source: "model" };
 }
 
-// Deterministic stand-in — used automatically whenever the Claude call
+// Deterministic stand-in — used automatically whenever the model call
 // fails (no credits, expired AWS session, etc.), so this feature demos
 // today and starts using live extraction the moment Bedrock credentials
 // are valid, with no code change required. Only ever sees `text`, so a
@@ -100,7 +91,7 @@ function extractHeuristic({ text }: ResumeSource): ResumeFields {
 
 export async function extractResumeFields(source: ResumeSource): Promise<ResumeFields> {
   try {
-    return await extractWithClaude(source);
+    return await extractWithModel(source);
   } catch {
     return extractHeuristic(source);
   }

@@ -1,4 +1,4 @@
-import { getAnthropicClient, BEDROCK_MODEL } from "./client";
+import { converseJson } from "./client";
 
 export interface SkillMatchJob {
   uuid: string;
@@ -12,24 +12,36 @@ export interface SkillMatchResult {
   matchedSkillsRequired: string[];
 }
 
+// An array keyed by job ID, not an object with dynamic keys — Bedrock's
+// tool-use schema validation (Converse API, see lib/llm/client.ts) is much
+// more reliably enforced for fixed-shape array items than for
+// `additionalProperties`-style dynamic-key objects, which is what
+// Anthropic's json_schema mode used previously.
 const SKILL_MATCH_SCHEMA = {
   type: "object",
-  additionalProperties: {
-    type: "object",
-    properties: {
-      matchedTransferableSkills: { type: "array", items: { type: "string" } },
-      matchedSkillsRequired: { type: "array", items: { type: "string" } },
+  properties: {
+    matches: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          jobId: { type: "string" },
+          matchedTransferableSkills: { type: "array", items: { type: "string" } },
+          matchedSkillsRequired: { type: "array", items: { type: "string" } },
+        },
+        required: ["jobId", "matchedTransferableSkills", "matchedSkillsRequired"],
+        additionalProperties: false,
+      },
     },
-    required: ["matchedTransferableSkills", "matchedSkillsRequired"],
-    additionalProperties: false,
   },
+  required: ["matches"],
+  additionalProperties: false,
 } as const;
 
-async function matchWithClaude(
+async function matchWithModel(
   userSkills: string[],
   jobs: SkillMatchJob[]
 ): Promise<Record<string, SkillMatchResult>> {
-  const client = getAnthropicClient();
   const jobsDescription = jobs
     .map(
       (job) =>
@@ -37,25 +49,23 @@ async function matchWithClaude(
     )
     .join("\n");
 
-  const response = await client.messages.create({
-    model: BEDROCK_MODEL.sonnet5,
-    max_tokens: 2000,
-    output_config: { format: { type: "json_schema", schema: SKILL_MATCH_SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content:
-          `A job seeker has these skills: [${userSkills.join(", ")}].\n\nJobs:\n${jobsDescription}\n\n` +
-          "For each job (keyed by its ID), identify which of the seeker's skills are relevant to that job's " +
-          "transferable skills or required skills — match on semantic similarity and career relevance, not " +
-          "just exact string overlap.",
-      },
-    ],
-  });
+  const parsed = await converseJson<{ matches: (SkillMatchResult & { jobId: string })[] }>(
+    `A job seeker has these skills: [${userSkills.join(", ")}].\n\nJobs:\n${jobsDescription}\n\n` +
+      "For each job (keyed by its ID as jobId), identify which of the seeker's skills are relevant to that job's " +
+      "transferable skills or required skills — match on semantic similarity and career relevance, not " +
+      "just exact string overlap.",
+    SKILL_MATCH_SCHEMA,
+    { maxTokens: 2000 }
+  );
 
-  const block = response.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") throw new Error("No text content in Claude response");
-  return JSON.parse(block.text);
+  const result: Record<string, SkillMatchResult> = {};
+  for (const m of parsed.matches) {
+    result[m.jobId] = {
+      matchedTransferableSkills: m.matchedTransferableSkills,
+      matchedSkillsRequired: m.matchedSkillsRequired,
+    };
+  }
+  return result;
 }
 
 function fuzzyOverlap(userSkill: string, jobSkill: string): boolean {
@@ -66,7 +76,7 @@ function fuzzyOverlap(userSkill: string, jobSkill: string): boolean {
 
 // Deterministic stand-in — same auto-fallback pattern as
 // lib/llm/extractResume.ts and summarizeInterests.ts. Matches by substring
-// overlap rather than Claude's semantic judgment, so it catches "SQL" but
+// overlap rather than the model's semantic judgment, so it catches "SQL" but
 // not e.g. "database querying" ~ "SQL".
 function matchHeuristic(userSkills: string[], jobs: SkillMatchJob[]): Record<string, SkillMatchResult> {
   const matches: Record<string, SkillMatchResult> = {};
@@ -86,7 +96,7 @@ export async function matchSkillsToJobs(
   jobs: SkillMatchJob[]
 ): Promise<Record<string, SkillMatchResult>> {
   try {
-    return await matchWithClaude(userSkills, jobs);
+    return await matchWithModel(userSkills, jobs);
   } catch {
     return matchHeuristic(userSkills, jobs);
   }

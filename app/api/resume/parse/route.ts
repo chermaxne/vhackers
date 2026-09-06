@@ -33,16 +33,14 @@ export async function POST(request: Request) {
     );
   }
 
-  // DOCX has no native multimodal path, so it needs extractable text. PDFs
-  // don't — a scanned/image-only PDF (empty pdf-parse text) still goes to
-  // Claude as a document below, which reads it directly.
+  // DOCX has no native multimodal path, so it needs extractable text. A
+  // scanned/image-only PDF (empty pdf-parse text) is let through rather
+  // than erroring — see lib/llm/extractResume.ts on why that degrades to
+  // mostly-null fields instead of being read natively right now.
   if (!text.trim() && !isPdf) {
     return NextResponse.json({ status: "error", error: "No extractable text found in the file" }, { status: 422 });
   }
 
-  const fields = await extractResumeFields({
-    text,
-    pdfBase64: isPdf ? buffer.toString("base64") : undefined,
-  });
-  return NextResponse.json({ status: "ok", data: { fields, resumeText: text } });
+  const fields = await extractResumeFields({ text });
+  return NextResponse.json({ status: "ok", data: { fields } });
 }

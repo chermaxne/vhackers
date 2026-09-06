@@ -1,9 +1,9 @@
-import { getAnthropicClient, BEDROCK_MODEL } from "./client";
+import { converseText } from "./client";
 import type { CandidacyScore } from "../candidacyScore";
 
 export interface CandidacyRationale {
   sentence: string;
-  source: "claude" | "heuristic";
+  source: "model" | "heuristic";
 }
 
 const SYSTEM_PROMPT =
@@ -11,33 +11,21 @@ const SYSTEM_PROMPT =
   "candidacy score for a mobile app screen. Be specific and encouraging without " +
   "overstating. Maximum 25 words. Output the sentence only — no preamble, no quotes.";
 
-async function rationaleWithClaude(
+async function rationaleWithModel(
   candidacy: CandidacyScore,
   targetRole: string,
   postingsCount: number
 ): Promise<CandidacyRationale> {
-  const client = getAnthropicClient();
   const topSkills = candidacy.coveredSkills.slice(0, 2).join(", ") || "none yet";
   const topGap = candidacy.gapSkills[0] ?? "none";
 
-  const response = await client.messages.create({
-    model: BEDROCK_MODEL.haiku45,
-    max_tokens: 80,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content:
-          `score: ${candidacy.score}\nband: ${candidacy.bandLabel}\n` +
-          `skill_coverage_pct: ${candidacy.skillCoveragePct}\nstrongest_transferable_skills: ${topSkills}\n` +
-          `top_skill_gap: ${topGap}\ntarget_role: ${targetRole}\nlive_postings_count: ${postingsCount}`,
-      },
-    ],
-  });
-
-  const block = response.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") throw new Error("No text content in Claude response");
-  return { sentence: block.text.trim(), source: "claude" };
+  const sentence = await converseText(
+    `score: ${candidacy.score}\nband: ${candidacy.bandLabel}\n` +
+      `skill_coverage_pct: ${candidacy.skillCoveragePct}\nstrongest_transferable_skills: ${topSkills}\n` +
+      `top_skill_gap: ${topGap}\ntarget_role: ${targetRole}\nlive_postings_count: ${postingsCount}`,
+    { system: SYSTEM_PROMPT, maxTokens: 80 }
+  );
+  return { sentence, source: "model" };
 }
 
 // Deterministic stand-in — same auto-fallback pattern as the rest of lib/llm/*.
@@ -58,7 +46,7 @@ export async function generateCandidacyRationale(
   postingsCount: number
 ): Promise<CandidacyRationale> {
   try {
-    return await rationaleWithClaude(candidacy, targetRole, postingsCount);
+    return await rationaleWithModel(candidacy, targetRole, postingsCount);
   } catch {
     return rationaleHeuristic(candidacy, targetRole);
   }

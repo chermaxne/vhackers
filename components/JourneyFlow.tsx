@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { useRouter } from "next/navigation";
 import SwipeDeck from "@/components/SwipeDeck";
 import ProfileCreation from "@/components/screens/ProfileCreation";
 import DirectRoleEntry from "@/components/screens/DirectRoleEntry";
@@ -9,7 +8,7 @@ import GuidedDiscoveryIntro from "@/components/screens/GuidedDiscoveryIntro";
 import AiSummary from "@/components/screens/AiSummary";
 import SkillGapScreen from "@/components/screens/SkillGapScreen";
 import WhatThisUnlocks from "@/components/screens/WhatThisUnlocks";
-import ResumeTailoring from "@/components/screens/ResumeTailoring";
+import RoadmapUnlocked from "@/components/screens/RoadmapUnlocked";
 import InterviewPrep from "@/components/screens/InterviewPrep";
 import Welcome from "@/components/screens/Welcome";
 import { buildRoadmapForRole, buildRoadmapFromLikedJobs } from "@/lib/roadmap";
@@ -25,7 +24,6 @@ type Screen =
   | "skill-gap"
   | "unlocks"
   | "roadmap"
-  | "resume-tailoring"
   | "interview-prep";
 
 const STEP_ORDER: Screen[] = [
@@ -49,7 +47,6 @@ export default function JourneyFlow({
   onImmersiveChange?: (isImmersive: boolean) => void;
   onRestart: () => void;
 }) {
-  const router = useRouter();
   const [screen, setScreen] = useState<Screen>("welcome");
   const [history, setHistory] = useState<Screen[]>([]);
 
@@ -59,11 +56,6 @@ export default function JourneyFlow({
   }, [screen]);
 
   function navigate(next: Screen) {
-    // Intercept navigation to roadmap and route to /roadmap/view
-    if (next === "roadmap") {
-      router.push("/roadmap/view");
-      return;
-    }
     setHistory((prev) => [...prev, screen]);
     setScreen(next);
   }
@@ -108,8 +100,8 @@ export default function JourneyFlow({
 
       {screen === "profile" && (
         <ProfileCreation
-          onDone={({ resumeFileName, resumeFields, resumeText, knowsTargetRole, userSkills }) => {
-            setFlow((prev) => ({ ...prev, resumeFileName, resumeFields, resumeText, userSkills }));
+          onDone={({ resumeFileName, resumeFields, knowsTargetRole, userSkills }) => {
+            setFlow((prev) => ({ ...prev, resumeFileName, resumeFields, userSkills }));
             navigate(knowsTargetRole ? "direct-role" : "guided-discovery");
           }}
           onBack={onBack}
@@ -172,11 +164,14 @@ export default function JourneyFlow({
         />
       )}
 
-      {screen === "resume-tailoring" && flow.resumeText && flow.roadmap && (
-        <ResumeTailoring
-          resumeText={flow.resumeText}
-          targetRole={flow.roadmap.targetLabel}
-          emphasizeSkills={flow.roadmap.skillGaps.slice(0, 5).map((g) => g.skill)}
+      {screen === "roadmap" && flow.roadmap && (
+        <RoadmapUnlocked
+          roadmap={flow.roadmap}
+          constraints={flow.constraints}
+          userSkills={flow.userSkills}
+          onExploreOtherRoles={flow.cameFromDirectEntry ? () => navigate("swipe") : undefined}
+          onPrepareInterview={() => navigate("interview-prep")}
+          onRestart={restart}
           onBack={onBack}
         />
       )}

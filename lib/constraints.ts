@@ -6,6 +6,8 @@ export interface Constraints {
   budgetSgd: number | null;
   skillsFutureCreditSgd: number | null;
   urgency: Urgency;
+  /** Free-text accessibility/scheduling accommodations, e.g. "need screen-reader-compatible courses". Optional — most consumers don't need to branch on it. */
+  accommodations?: string;
 }
 
 export const STUDY_HOURS_OPTIONS = [

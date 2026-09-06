@@ -9,7 +9,6 @@ export interface FlowState {
   resumeFileName: string | null;
   userSkills: string[];
   resumeFields: ResumeFields | null;
-  resumeText: string | null;
   constraints: Constraints | null;
   cameFromDirectEntry: boolean;
   // Live, industry-scoped roles pulled for the current swipe deck — set
@@ -23,7 +22,6 @@ export const INITIAL_FLOW_STATE: FlowState = {
   resumeFileName: null,
   userSkills: [],
   resumeFields: null,
-  resumeText: null,
   constraints: null,
   cameFromDirectEntry: false,
   industryJobs: [],

@@ -1,4 +1,4 @@
-import { getAnthropicClient, BEDROCK_MODEL } from "./client";
+import { converseJson } from "./client";
 
 export type InterviewQuestionCategory = "Career transition story" | "Behavioral" | "Role-specific";
 
@@ -12,7 +12,7 @@ export interface InterviewQuestion {
 
 export interface InterviewPrepResult {
   questions: InterviewQuestion[];
-  source: "claude" | "heuristic";
+  source: "model" | "heuristic";
 }
 
 export interface InterviewPrepInput {
@@ -29,9 +29,7 @@ const SYSTEM_PROMPT =
   "You are an interview coach helping a mid-career professional prepare for a role " +
   "in a new industry. Using their resume and the target role's requirements, " +
   "generate likely interview questions with grounded, specific talking points — " +
-  "never generic advice. Return ONLY valid JSON matching the schema below. " +
-  "No preamble, no markdown code fences.\n\n" +
-  'Schema:\n{"questions":[{"category":"","question":"","why_asked":"","suggested_talking_point":"","source_bullet":""}]}';
+  "never generic advice.";
 
 const QUESTION_SCHEMA = {
   type: "object",
@@ -44,7 +42,15 @@ const QUESTION_SCHEMA = {
           category: { type: "string", enum: ["Career transition story", "Behavioral", "Role-specific"] },
           question: { type: "string" },
           why_asked: { type: "string" },
-          suggested_talking_point: { type: "string" },
+          suggested_talking_point: {
+            type: "string",
+            description:
+              "A 3-4 sentence structured answer outline, not a one-liner: open with the specific " +
+              "situation/context from their real background, name the concrete action they took, state " +
+              "the outcome or measurable result, then explicitly connect it to why it matters for the " +
+              "target role. Every sentence must be grounded in the person's actual listed experience — " +
+              "no generic interview-coaching filler.",
+          },
           source_bullet: { type: ["string", "null"] },
         },
         required: ["category", "question", "why_asked", "suggested_talking_point", "source_bullet"],
@@ -56,34 +62,8 @@ const QUESTION_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-async function generateWithClaude(input: InterviewPrepInput): Promise<InterviewPrepResult> {
-  const client = getAnthropicClient();
-  const response = await client.messages.create({
-    model: BEDROCK_MODEL.sonnet5,
-    max_tokens: 2000,
-    system: SYSTEM_PROMPT,
-    output_config: { format: { type: "json_schema", schema: QUESTION_SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content:
-          `Current role: ${input.currentRole ?? "not specified"}\n` +
-          `Years of experience: ${input.yearsExperience ?? "not specified"}\n` +
-          `Skills: ${input.skills.join(", ") || "none listed"}\n\n` +
-          `Target role: ${input.targetRole}\n` +
-          `Target role required skills: ${input.jdRequiredSkills.join(", ") || "none listed"}\n` +
-          `Identified skill gaps: ${input.skillGaps.join(", ") || "none"}\n` +
-          `Transferable skills flagged as relevant: ${input.transferableSkills.join(", ") || "none"}\n\n` +
-          "Generate 6-8 questions spanning all three categories (career transition story, " +
-          "behavioral, role-specific/technical). Every suggested_talking_point must reference a " +
-          "specific transferable skill or piece of experience listed above — not generic advice.",
-      },
-    ],
-  });
-
-  const block = response.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") throw new Error("No text content in Claude response");
-  const parsed = JSON.parse(block.text) as {
+async function generateWithModel(input: InterviewPrepInput): Promise<InterviewPrepResult> {
+  const parsed = await converseJson<{
     questions: {
       category: InterviewQuestionCategory;
       question: string;
@@ -91,10 +71,25 @@ async function generateWithClaude(input: InterviewPrepInput): Promise<InterviewP
       suggested_talking_point: string;
       source_bullet: string | null;
     }[];
-  };
+  }>(
+    `Current role: ${input.currentRole ?? "not specified"}\n` +
+      `Years of experience: ${input.yearsExperience ?? "not specified"}\n` +
+      `Skills: ${input.skills.join(", ") || "none listed"}\n\n` +
+      `Target role: ${input.targetRole}\n` +
+      `Target role required skills: ${input.jdRequiredSkills.join(", ") || "none listed"}\n` +
+      `Identified skill gaps: ${input.skillGaps.join(", ") || "none"}\n` +
+      `Transferable skills flagged as relevant: ${input.transferableSkills.join(", ") || "none"}\n\n` +
+      "Generate 6-8 questions spanning all three categories (career transition story, " +
+      "behavioral, role-specific/technical). Every suggested_talking_point must be a full 3-4 " +
+      "sentence structured answer outline (situation → action → outcome → why it matters for the " +
+      "target role) referencing a specific transferable skill or piece of experience listed above — " +
+      "not a one-line tip and not generic advice.",
+    QUESTION_SCHEMA,
+    { system: SYSTEM_PROMPT, maxTokens: 3500 }
+  );
 
   return {
-    source: "claude",
+    source: "model",
     questions: parsed.questions.map((q) => ({
       category: q.category,
       question: q.question,
@@ -119,42 +114,62 @@ function generateHeuristic(input: InterviewPrepInput): InterviewPrepResult {
       category: "Career transition story",
       question: `What's drawing you to ${roleClause}?`,
       whyAsked: "Interviewers open with this to gauge whether the transition is deliberate and well-reasoned.",
-      suggestedTalkingPoint: `Anchor your answer in ${topTransferable} — name a specific time you used it and connect it to why ${input.targetRole} is a natural next step.`,
+      suggestedTalkingPoint:
+        `Start with a specific moment in your current work where ${topTransferable} made a real difference — ` +
+        `describe the situation briefly, then what you actually did. Name the outcome, even roughly (time saved, ` +
+        `a problem avoided, a person helped). Then say directly why that same strength is exactly what a ` +
+        `${input.targetRole} needs day to day — don't leave the interviewer to make that connection themselves.`,
       sourceBullet: null,
     },
     {
       category: "Career transition story",
       question: `What do you think will be the hardest part of this transition?`,
       whyAsked: "Tests self-awareness about the real gap, not just enthusiasm for the new field.",
-      suggestedTalkingPoint: `Name ${topGap} honestly, then describe the concrete plan (courses, practice) you're already following to close it.`,
+      suggestedTalkingPoint:
+        `Name ${topGap} honestly as the real gap — don't minimize it or claim you're already there. Describe the ` +
+        `concrete plan you're already executing to close it (a specific course, a project, hours per week), and ` +
+        `give a rough timeline. Close by reframing this as evidence of how you approach unfamiliar problems in general.`,
       sourceBullet: null,
     },
     {
       category: "Behavioral",
       question: `Tell me about a time you used ${topTransferable} to solve a problem.`,
       whyAsked: "Behavioral questions probe for evidence, not claims — they want a specific story, not a trait list.",
-      suggestedTalkingPoint: `Use a real example from your work as ${input.currentRole ?? "your current role"}, and explicitly translate the outcome into what it would mean for a ${input.targetRole}.`,
+      suggestedTalkingPoint:
+        `Pick one real, specific episode from your time as ${input.currentRole ?? "your current role"} — set up ` +
+        `the situation in a sentence, then what you personally did (not what your team did). State the concrete ` +
+        `result. Finish by translating that result into language a ${input.targetRole} hiring manager would ` +
+        `recognize as directly relevant to their day-to-day.`,
       sourceBullet: null,
     },
     {
       category: "Behavioral",
       question: "Describe a time you had to learn something completely new under time pressure.",
       whyAsked: `Since ${topGap} is a real gap, they're checking how you actually close skill gaps in practice.`,
-      suggestedTalkingPoint: "Pick a genuine example of fast learning — the story matters more than the topic.",
+      suggestedTalkingPoint:
+        `Choose a genuine example of learning fast under a real deadline — what forced the urgency, what your ` +
+        `first move was, and how you validated you'd actually learned it (not just read about it). The specific ` +
+        `topic matters less than showing a repeatable process, since that's what reassures them about ${topGap}.`,
       sourceBullet: null,
     },
     {
       category: "Role-specific",
       question: `How comfortable are you with ${topGap}? What's your plan to build that up?`,
       whyAsked: "Directly probes the biggest gap between your background and the role's requirements.",
-      suggestedTalkingPoint: `Be honest about your current level, then point to the specific roadmap step (course, project) already targeting this.`,
+      suggestedTalkingPoint:
+        `Be honest about your current level rather than overstating it — vague confidence reads worse than a ` +
+        `clear plan. Name the specific roadmap step (course, project, practice routine) already targeting this, ` +
+        `plus a rough timeline for when you'd expect to be job-ready on it, so the answer feels concrete, not aspirational.`,
       sourceBullet: null,
     },
     {
       category: "Role-specific",
       question: `What about your background as ${input.currentRole ?? "your current background"} do you think most people would overlook as relevant here?`,
       whyAsked: "Gives you room to reframe experience that looks unrelated on paper as genuinely transferable.",
-      suggestedTalkingPoint: `Lead with ${topTransferable} — most candidates from inside the industry won't have it, which is your edge.`,
+      suggestedTalkingPoint:
+        `Lead with ${topTransferable} and a concrete instance of using it. Explain why someone hiring purely ` +
+        `from inside the ${input.targetRole} pipeline likely wouldn't have built this same strength, since it came ` +
+        `from a different kind of pressure or environment. That contrast is your actual edge — name it explicitly rather than implying it.`,
       sourceBullet: null,
     },
   ];
@@ -164,7 +179,7 @@ function generateHeuristic(input: InterviewPrepInput): InterviewPrepResult {
 
 export async function generateInterviewQuestions(input: InterviewPrepInput): Promise<InterviewPrepResult> {
   try {
-    return await generateWithClaude(input);
+    return await generateWithModel(input);
   } catch {
     return generateHeuristic(input);
   }

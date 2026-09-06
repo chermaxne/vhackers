@@ -12,7 +12,6 @@ export default function ProfileCreation({
   onDone: (input: {
     resumeFileName: string | null;
     resumeFields: ResumeFields | null;
-    resumeText: string | null;
     userSkills: string[];
     knowsTargetRole: boolean;
   }) => void;
@@ -21,11 +20,10 @@ export default function ProfileCreation({
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeFields, setResumeFields] = useState<ResumeFields | null>(null);
-  const [resumeText, setResumeText] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
 
-  async function extractFromResume(file: File): Promise<{ fields: ResumeFields; resumeText: string } | null> {
+  async function extractFromResume(file: File): Promise<{ fields: ResumeFields } | null> {
     setIsExtracting(true);
     setExtractionError(null);
     try {
@@ -34,9 +32,8 @@ export default function ProfileCreation({
       const res = await fetch("/api/resume/parse", { method: "POST", body: formData });
       const json = await res.json();
       if (json.status !== "ok") throw new Error(json.error ?? "Failed to extract skills from resume");
-      const result = json.data as { fields: ResumeFields; resumeText: string };
+      const result = json.data as { fields: ResumeFields };
       setResumeFields(result.fields);
-      setResumeText(result.resumeText);
       return result;
     } catch (error) {
       console.error("Error extracting skills:", error);
@@ -55,7 +52,6 @@ export default function ProfileCreation({
     setResumeFileName(file.name);
     setResumeFile(file);
     setResumeFields(null);
-    setResumeText(null);
     setExtractionError(null);
 
     if (!/\.(pdf|docx)$/i.test(file.name)) {
@@ -68,21 +64,18 @@ export default function ProfileCreation({
 
   async function handleContinue(knowsTargetRole: boolean) {
     let fields = resumeFields;
-    let text = resumeText;
 
     // If we have a file but haven't extracted yet (or it failed), try once more.
     if (resumeFile && !fields && !isExtracting) {
       const result = await extractFromResume(resumeFile);
       if (result) {
         fields = result.fields;
-        text = result.resumeText;
       }
     }
 
     onDone({
       resumeFileName,
       resumeFields: fields,
-      resumeText: text,
       userSkills: fields?.skills ?? [],
       knowsTargetRole,
     });
@@ -142,7 +135,7 @@ export default function ProfileCreation({
             )}
             {resumeFields.source === "heuristic" && (
               <p className="mt-2 text-[11px] text-ink-muted">
-                Keyword-matched for now — swaps to full Claude extraction automatically once Bedrock credentials are
+                Keyword-matched for now — swaps to full model extraction automatically once Bedrock credentials are
                 live.
               </p>
             )}

@@ -1,274 +1,299 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
+import ScreenShell from "../ScreenShell";
+import { STUDY_HOURS_OPTIONS, URGENCY_OPTIONS, type Constraints, type Urgency } from "@/lib/constraints";
+import { INDUSTRIES } from "@/lib/industries";
+import type { JobCard } from "@/lib/jobs";
 
-export interface GuidedConstraints {
-  workArrangements: string[];
-  targetIndustries: string[];
-  blacklistedIndustries: string[];
-  maxHoursPerWeek: number;
-  sfcBalance: number;
-  accommodations: string;
+// Swipe deck is for exploring the space, not browsing the whole market —
+// keep it short regardless of how many industries got selected.
+const SWIPE_DECK_TARGET_SIZE = 8;
+
+// Richer, multi-select set merged in from a teammate's parallel take on this
+// screen — worth keeping over the original single-select four options.
+const WORK_OPTIONS = [
+  "Hybrid (2-3 days remote)",
+  "Fully Remote",
+  "On-Site / Office-First",
+  "Flexible Hours / Asynchronous",
+] as const;
+
+function ChipGroup<T extends string | number>({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: { label: string; value: T }[];
+  selected: T | null;
+  onSelect: (value: T) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => (
+        <button
+          key={option.label}
+          type="button"
+          onClick={() => onSelect(option.value)}
+          className={`rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
+            selected === option.value
+              ? "border-primary bg-primary text-white"
+              : "border-primary-pale bg-primary-pale/30 text-ink hover:bg-primary-pale/60"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
-interface Props {
-  onSubmit: (constraints: any, jobs: any[]) => void;
+function MultiChipGroup({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: readonly string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => {
+        const active = selected.includes(option);
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onToggle(option)}
+            className={`rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
+              active
+                ? "border-primary bg-primary text-white"
+                : "border-primary-pale bg-primary-pale/30 text-ink hover:bg-primary-pale/60"
+            }`}
+          >
+            {active ? "✓ " : ""}
+            {option}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function GuidedDiscoveryIntro({
+  onSubmit,
+  onBack,
+}: {
+  onSubmit: (constraints: Constraints, jobs: JobCard[]) => void;
   onBack?: () => void;
-}
-
-export default function GuidedDiscoveryIntro({ onSubmit, onBack }: Props) {
-  const [workArrangements, setWorkArrangements] = useState<string[]>([
-    "Hybrid (2-3 days remote)",
-  ]);
+}) {
+  const [workArrangements, setWorkArrangements] = useState<string[]>([]);
   const [showOtherWork, setShowOtherWork] = useState(false);
   const [otherWorkText, setOtherWorkText] = useState("");
+  const [studyHoursPerWeek, setStudyHoursPerWeek] = useState<number | null>(null);
+  const [urgency, setUrgency] = useState<Urgency | null>(null);
+  const [budgetInput, setBudgetInput] = useState("");
+  const [creditInput, setCreditInput] = useState("");
+  const [accommodations, setAccommodations] = useState("");
+  const [industryIds, setIndustryIds] = useState<string[]>([]);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [selectedIndustries, setSelectedIndustries] = useState<string[]>([
-    "Enterprise SaaS",
-    "FinTech & Banking",
-  ]);
-  const [showOtherIndustry, setShowOtherIndustry] = useState(false);
-  const [otherIndustryText, setOtherIndustryText] = useState("");
-
-  const [hoursPerWeek, setHoursPerWeek] = useState<number>(8);
-  const [sfcBalance, setSfcBalance] = useState<number>(500);
-  const [hasAccommodation, setHasAccommodation] = useState(false);
-  const [accommodationNotes, setAccommodationNotes] = useState("");
-
-  const workOptions = [
-    "Hybrid (2-3 days remote)",
-    "Fully Remote",
-    "On-Site / Office-First",
-    "Flexible Hours / Asynchronous",
+  const activeWorkArrangements = [
+    ...workArrangements,
+    ...(showOtherWork && otherWorkText.trim() ? [otherWorkText.trim()] : []),
   ];
 
-  const industryOptions = [
-    "Enterprise SaaS",
-    "FinTech & Banking",
-    "Healthcare & Biotech",
-    "Public Sector & GovTech",
-    "E-Commerce & Retail",
-    "Green Tech & Sustainability",
-  ];
+  const canSubmit =
+    activeWorkArrangements.length > 0 && studyHoursPerWeek !== null && urgency !== null && industryIds.length > 0;
 
-  const toggleItem = (item: string, list: string[], setList: (l: string[]) => void) => {
-    if (list.includes(item)) {
-      setList(list.filter((x) => x !== item));
-    } else {
-      setList([...list, item]);
-    }
-  };
+  function toggleWorkArrangement(option: string) {
+    setWorkArrangements((prev) => (prev.includes(option) ? prev.filter((o) => o !== option) : [...prev, option]));
+  }
 
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  function toggleIndustry(id: string) {
+    setIndustryIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  }
 
-    const activeIndustries = [
-      ...selectedIndustries,
-      ...(showOtherIndustry && otherIndustryText.trim() ? [otherIndustryText.trim()] : []),
-    ];
+  async function handleSubmit() {
+    if (!canSubmit || isLoadingRoles) return;
+    setIsLoadingRoles(true);
+    setLoadError(null);
 
-    const constraints = {
-      workArrangements: [
-        ...workArrangements,
-        ...(showOtherWork && otherWorkText.trim() ? [otherWorkText.trim()] : []),
-      ],
-      targetIndustries: activeIndustries,
-      maxHoursPerWeek: hoursPerWeek,
-      sfcBalance,
-      accommodations: hasAccommodation ? accommodationNotes : "",
+    const constraints: Constraints = {
+      remotePreference: activeWorkArrangements.join(", "),
+      studyHoursPerWeek: studyHoursPerWeek!,
+      urgency: urgency!,
+      budgetSgd: budgetInput.trim() ? Number(budgetInput) : null,
+      skillsFutureCreditSgd: creditInput.trim() ? Number(creditInput) : null,
+      accommodations: accommodations.trim() || undefined,
     };
 
-    onSubmit(constraints, []);
-  };
+    try {
+      // Deck is exploration-only, not exhaustive — keep it to a short swipe
+      // regardless of how many industries are selected, splitting the target
+      // across them rather than fetching full decks and discarding most of it.
+      const perIndustryLimit = Math.max(1, Math.ceil(SWIPE_DECK_TARGET_SIZE / industryIds.length));
+
+      const results = await Promise.allSettled(
+        industryIds.map(async (industryId) => {
+          const response = await fetch("/api/industry-roles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ industryId, limit: perIndustryLimit }),
+          });
+          if (!response.ok) throw new Error(`Request failed (${response.status})`);
+          const data = await response.json();
+          return data.cards as JobCard[];
+        })
+      );
+
+      const allCards = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+      if (allCards.length === 0) throw new Error("No live roles across any selected industry");
+
+      // Same industry's live pull can occasionally overlap with another's — dedupe by title.
+      const seenTitles = new Set<string>();
+      const merged = allCards.filter((card) => {
+        const key = card.title.trim().toLowerCase();
+        if (seenTitles.has(key)) return false;
+        seenTitles.add(key);
+        return true;
+      });
+
+      onSubmit(constraints, merged.slice(0, SWIPE_DECK_TARGET_SIZE));
+    } catch {
+      setLoadError("Couldn't pull live roles right now — showing a sample deck instead.");
+      onSubmit(constraints, []);
+    } finally {
+      setIsLoadingRoles(false);
+    }
+  }
 
   return (
-    <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-indigo-100/50 border border-slate-100 p-6 font-sans">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+    <ScreenShell
+      title="A few quick constraints"
+      subtitle="So the roadmap we build actually fits your life — everything else you tell us by swiping."
+      onBack={onBack}
+    >
+      <div className="space-y-6">
         <div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#6C72B9]" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#6C72B9]">
-              Perceive Constraints
-            </span>
-          </div>
-          <h2 className="text-lg font-bold text-slate-900 mt-0.5">
-            Preferences & Safeguards
-          </h2>
-        </div>
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-xs text-slate-500 hover:text-slate-800 bg-slate-100 px-3 py-1.5 rounded-full"
-          >
-            Back
-          </button>
-        )}
-      </div>
-
-      <form onSubmit={handleFormSubmit} className="space-y-5">
-        {/* Work Arrangement Multi-select */}
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-            Work Arrangement Preference (Multi-select)
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            {workOptions.map((opt) => {
-              const active = workArrangements.includes(opt);
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">
+            Which industries interest you? (select all that apply)
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {INDUSTRIES.map((industry) => {
+              const active = industryIds.includes(industry.id);
               return (
                 <button
+                  key={industry.id}
                   type="button"
-                  key={opt}
-                  onClick={() => toggleItem(opt, workArrangements, setWorkArrangements)}
-                  className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition ${
+                  onClick={() => toggleIndustry(industry.id)}
+                  className={`rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
                     active
-                      ? "bg-[#6C72B9] border-[#6C72B9] text-white shadow-sm"
-                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                      ? "border-primary bg-primary text-white"
+                      : "border-primary-pale bg-primary-pale/30 text-ink hover:bg-primary-pale/60"
                   }`}
                 >
-                  {active ? "✓ " : "+ "}
-                  {opt}
+                  {active ? "✓ " : ""}
+                  {industry.label}
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">Work setup (select all that apply)</p>
+          <div className="flex flex-wrap gap-2">
+            <MultiChipGroup options={WORK_OPTIONS} selected={workArrangements} onToggle={toggleWorkArrangement} />
             <button
               type="button"
-              onClick={() => setShowOtherWork(!showOtherWork)}
-              className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition ${
+              onClick={() => setShowOtherWork((v) => !v)}
+              className={`rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
                 showOtherWork
-                  ? "bg-[#6C72B9]/15 border-[#6C72B9] text-[#6C72B9]"
-                  : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                  ? "border-primary bg-primary-pale/60 text-primary-dark"
+                  : "border-primary-pale bg-primary-pale/30 text-ink-muted hover:bg-primary-pale/60"
               }`}
             >
-              {showOtherWork ? "✕ Cancel" : "+ Others"}
+              {showOtherWork ? "✕ Cancel" : "+ Other"}
             </button>
           </div>
-
           {showOtherWork && (
             <input
               type="text"
               value={otherWorkText}
               onChange={(e) => setOtherWorkText(e.target.value)}
               placeholder="e.g. 4-day work week, shift-based"
-              className="mt-2 w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-[#6C72B9]"
+              className="mt-2 w-full rounded-xl border-2 border-primary-pale bg-primary-pale/30 px-3 py-2.5 text-sm text-ink outline-none transition focus:border-primary"
             />
           )}
         </div>
 
-        {/* Target Industries Whitelist */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-            Target Industries of Interest (Multi-select)
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            {industryOptions.map((ind) => {
-              const active = selectedIndustries.includes(ind);
-              return (
-                <button
-                  type="button"
-                  key={ind}
-                  onClick={() => toggleItem(ind, selectedIndustries, setSelectedIndustries)}
-                  className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition ${
-                    active
-                      ? "bg-[#6C72B9] border-[#6C72B9] text-white shadow-sm"
-                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {active ? "✓ " : "+ "}
-                  {ind}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setShowOtherIndustry(!showOtherIndustry)}
-              className={`text-xs px-3 py-1.5 rounded-xl border font-medium transition ${
-                showOtherIndustry
-                  ? "bg-[#6C72B9]/15 border-[#6C72B9] text-[#6C72B9]"
-                  : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-              }`}
-            >
-              {showOtherIndustry ? "✕ Cancel" : "+ Others"}
-            </button>
-          </div>
-
-          {showOtherIndustry && (
-            <input
-              type="text"
-              value={otherIndustryText}
-              onChange={(e) => setOtherIndustryText(e.target.value)}
-              placeholder="e.g. Clean Energy, Maritime, Aviation"
-              className="mt-2 w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-[#6C72B9]"
-            />
-          )}
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">Study time per week</p>
+          <ChipGroup options={[...STUDY_HOURS_OPTIONS]} selected={studyHoursPerWeek} onSelect={setStudyHoursPerWeek} />
         </div>
 
-        {/* Study Hours & SFC Credit */}
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-[11px] font-semibold text-slate-600">Weekly Effort</span>
-              <span className="text-xs font-bold text-[#6C72B9]">{hoursPerWeek}h/wk</span>
-            </div>
-            <input
-              type="range"
-              min={4}
-              max={20}
-              step={2}
-              value={hoursPerWeek}
-              onChange={(e) => setHoursPerWeek(Number(e.target.value))}
-              className="w-full accent-[#6C72B9] cursor-pointer"
-            />
-          </div>
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">How urgent is this?</p>
+          <ChipGroup options={URGENCY_OPTIONS} selected={urgency} onSelect={setUrgency} />
+        </div>
 
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-            <span className="text-[11px] font-semibold text-slate-600 block mb-1">
-              SFC Credit Balance[cite: 1, 4]
-            </span>
-            <div className="relative flex items-center">
-              <span className="absolute left-2.5 text-xs text-slate-400">S$</span>
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">Budget (optional)</p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink-muted">Course budget (SGD)</span>
               <input
                 type="number"
-                value={sfcBalance}
-                onChange={(e) => setSfcBalance(Number(e.target.value))}
-                className="w-full text-xs font-bold pl-7 pr-2 py-1 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#6C72B9]"
+                min={0}
+                inputMode="numeric"
+                value={budgetInput}
+                onChange={(e) => setBudgetInput(e.target.value)}
+                placeholder="e.g. 300"
+                className="w-full rounded-xl border-2 border-primary-pale bg-primary-pale/30 px-3 py-2.5 text-sm text-ink outline-none transition focus:border-primary"
               />
-            </div>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink-muted">SkillsFuture Credit</span>
+              <input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={creditInput}
+                onChange={(e) => setCreditInput(e.target.value)}
+                placeholder="e.g. 500"
+                className="w-full rounded-xl border-2 border-primary-pale bg-primary-pale/30 px-3 py-2.5 text-sm text-ink outline-none transition focus:border-primary"
+              />
+            </label>
           </div>
+          <p className="mt-1.5 text-xs text-ink-muted">
+            Leave blank if you&apos;re not sure — you can check your balance on the SkillsFuture portal.
+          </p>
         </div>
 
-        {/* Accessibility Accommodation Toggle */}
-        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={hasAccommodation}
-              onChange={(e) => setHasAccommodation(e.target.checked)}
-              className="w-4 h-4 accent-[#6C72B9] rounded"
-            />
-            <span className="text-xs font-semibold text-slate-700">
-              Require accessibility or ergonomic accommodations[cite: 1]
-            </span>
-          </label>
-          {hasAccommodation && (
-            <input
-              type="text"
-              value={accommodationNotes}
-              onChange={(e) => setAccommodationNotes(e.target.value)}
-              placeholder="e.g. Screen reader compatible, ergonomic desk setup"
-              className="mt-2 w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#6C72B9]"
-            />
-          )}
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">Accommodations (optional)</p>
+          <input
+            type="text"
+            value={accommodations}
+            onChange={(e) => setAccommodations(e.target.value)}
+            placeholder="e.g. need screen-reader-compatible courses, caregiving hours to work around"
+            className="w-full rounded-xl border-2 border-primary-pale bg-primary-pale/30 px-3 py-2.5 text-sm text-ink outline-none transition focus:border-primary"
+          />
         </div>
+      </div>
 
-        <button
-          type="submit"
-          className="w-full py-3.5 bg-[#6C72B9] hover:bg-[#5b61a3] text-white font-bold rounded-2xl text-xs transition shadow-md shadow-indigo-100 flex items-center justify-center gap-2"
-        >
-          <span>Find Matching Roles</span>
-          <span>→</span>
-        </button>
-      </form>
-    </div>
+      {loadError && <p className="mt-4 text-center text-xs font-semibold text-accent-coral">{loadError}</p>}
+
+      <button
+        onClick={handleSubmit}
+        disabled={!canSubmit || isLoadingRoles}
+        className="mt-6 w-full rounded-full bg-primary px-4 py-3.5 font-display text-sm font-bold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {isLoadingRoles ? "Pulling live roles…" : "Show me roles"}
+      </button>
+    </ScreenShell>
   );
 }

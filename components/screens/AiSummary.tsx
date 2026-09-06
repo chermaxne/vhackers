@@ -71,7 +71,7 @@ export default function AiSummary({ likedJobs, onContinue, onBack }: { likedJobs
               <p className="text-sm leading-relaxed text-ink">{summary.narrative}</p>
               {summary.source === "heuristic" && (
                 <p className="mt-2 text-[11px] text-ink-muted">
-                  Computed directly from your picks — swaps to a live Claude-written summary automatically once API
+                  Computed directly from your picks — swaps to a live model-written summary automatically once API
                   credits are available.
                 </p>
               )}
